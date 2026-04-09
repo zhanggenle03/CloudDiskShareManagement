@@ -378,8 +378,8 @@
   .table-view .td-url a:hover { text-decoration: underline; }
   .table-view .td-meta { white-space: nowrap; }
   .table-view .td-tags { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .table-view .td-notes { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-                           color: var(--gray-400); font-size: 12px; }
+  .table-view .td-notes { width: 44px; min-width: 44px; max-width: 44px; text-align: center; }
+  .table-view .td-notes .note-icon { font-size: 15px; cursor: default; display: inline-block; line-height: 1; }
   .table-view .td-actions { white-space: nowrap; text-align: center; position: relative; }
   .table-view .td-source { width: 70px; text-align: center; }
   .table-view .td-source .source-badge { min-width: 48px; text-align: center; margin: 0 auto; }
@@ -389,7 +389,6 @@
   .table-view .td-meta { text-align: center; }
   .table-view .td-meta .expire-badge { margin: 0 auto; }
   .table-view .td-tags { text-align: center; }
-  .table-view .td-notes { text-align: center; }
   .table-view .th-center { text-align: center; }
   /* ── 表格行操作下拉菜单 ── */
   .row-menu-btn { padding: 4px 10px; border: 1px solid var(--gray-200); border-radius: 6px;
@@ -1585,7 +1584,11 @@ function renderTableRow(item) {
     <td class="td-meta"><span class="expire-badge ${expireClass}">${item.expire || '未知'}</span></td>
     <td class="td-meta">${item.share_time || '--'}</td>
     <td class="td-tags">${tagsHtml}</td>
-    <td class="td-notes" title="${escHtml(item.notes)}">${escHtml(item.notes) || '—'}</td>
+    <td class="td-notes">
+      ${item.notes
+        ? `<span class="note-icon" onmouseenter="showShareNoteTooltip(event,this)" data-note="${escHtml(item.notes)}" onmouseleave="hideRemarkTooltip()">📝</span>`
+        : '<span style="color:var(--gray-400)">—</span>'}
+    </td>
     <td class="td-actions">
       <button class="row-menu-btn" onclick="toggleRowMenu(event, this)">⋮</button>
       <div class="row-dropdown" id="menu-${item.id}">
@@ -3309,6 +3312,36 @@ function hideRemarkTooltip() {
     remarkTooltip.remove();
     remarkTooltip = null;
   }
+}
+
+// 分享列表备注气泡（直接接收文本，无需查账号状态）
+function showShareNoteTooltip(event, el) {
+  const text = el.dataset.note;
+  if (!text) return;
+  hideRemarkTooltip();
+
+  remarkTooltip = document.createElement('div');
+  remarkTooltip.className = 'remark-tooltip';
+  remarkTooltip.textContent = text;
+  document.body.appendChild(remarkTooltip);
+
+  const rect = el.getBoundingClientRect();
+  const tRect = remarkTooltip.getBoundingClientRect();
+
+  let left = rect.left;
+  let top = rect.bottom + 6;
+
+  // 防止超出屏幕右侧
+  if (left + tRect.width > window.innerWidth - 10) {
+    left = window.innerWidth - tRect.width - 10;
+  }
+  // 防止超出屏幕底部
+  if (top + tRect.height > window.innerHeight - 10) {
+    top = rect.top - tRect.height - 6;
+  }
+
+  remarkTooltip.style.left = left + 'px';
+  remarkTooltip.style.top = top + 'px';
 }
 
 function showAddAccountForm() {
