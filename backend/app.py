@@ -27,15 +27,8 @@ from process_manager import on_startup, on_shutdown, graceful_shutdown, restart_
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIR = os.path.join(BASE_DIR, 'frontend')
-FRONTEND_DIST_DIR = os.path.join(BASE_DIR, 'frontend-dist')
 
-# 优先使用 Vue 构建产物，不存在则回退到原始 frontend 目录
-if os.path.isdir(FRONTEND_DIST_DIR) and os.path.exists(os.path.join(FRONTEND_DIST_DIR, 'index.html')):
-    STATIC_DIR = FRONTEND_DIST_DIR
-else:
-    STATIC_DIR = FRONTEND_DIR
-
-app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
+app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='')
 CORS(app)
 
 # ── 日志 ──
@@ -44,7 +37,7 @@ log = setup_logger('app')
 # ─── 静态前端 ────────────────────────────────────────────────
 @app.route('/')
 def index():
-    return send_from_directory(STATIC_DIR, 'index.html')
+    return send_from_directory(FRONTEND_DIR, 'index.html')
 
 # ─── 导入 CSV ────────────────────────────────────────────────
 @app.route('/api/import', methods=['POST'])
