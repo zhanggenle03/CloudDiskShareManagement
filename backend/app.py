@@ -28,7 +28,7 @@ from process_manager import on_startup, on_shutdown, graceful_shutdown, restart_
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIR = os.path.join(BASE_DIR, 'frontend')
 
-app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='')
+app = Flask(__name__)
 CORS(app)
 
 # ── 日志 ──
@@ -37,7 +37,22 @@ log = setup_logger('app')
 # ─── 静态前端 ────────────────────────────────────────────────
 @app.route('/')
 def index():
+    index_path = os.path.join(FRONTEND_DIR, 'index.html')
+    if not os.path.exists(index_path):
+        log.error(f'index.html not found: {index_path}')
+        return 'index.html not found', 404
     return send_from_directory(FRONTEND_DIR, 'index.html')
+
+# 静态文件（favicon等）
+@app.route('/<path:filename>')
+def static_files(filename):
+    # 安全检查：禁止目录遍历
+    if '..' in filename:
+        return 'Invalid path', 400
+    file_path = os.path.join(FRONTEND_DIR, filename)
+    if not os.path.exists(file_path):
+        return 'File not found', 404
+    return send_from_directory(FRONTEND_DIR, filename)
 
 # ─── 导入 CSV ────────────────────────────────────────────────
 @app.route('/api/import', methods=['POST'])

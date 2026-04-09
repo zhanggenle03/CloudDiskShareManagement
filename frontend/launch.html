@@ -130,7 +130,7 @@
   }
 
   function openManual() {
-    window.location.href = API + '/index.html';
+    window.location.href = API + '/';
   }
 
   async function checkService() {
@@ -163,7 +163,7 @@
           document.getElementById('subtitle').textContent = '服务已就绪，即将进入主界面';
 
           setTimeout(() => {
-            window.location.href = API + '/index.html';
+            window.location.href = API + '/';
           }, 800);
           return;
         }
