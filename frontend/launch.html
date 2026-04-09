@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>正在启动 - 云盘分享管理工具</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #4F6EF7 0%, #7B5EA7 100%);
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+  }
+  .container { text-align: center; padding: 40px; max-width: 480px; }
+  .icon { font-size: 80px; margin-bottom: 32px; animation: float 2.5s ease-in-out infinite; }
+  @keyframes float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25% { transform: translateY(-12px) rotate(-3deg); }
+    50% { transform: translateY(-20px) rotate(0deg); }
+    75% { transform: translateY(-12px) rotate(3deg); }
+  }
+  h1 { font-size: 32px; font-weight: 700; margin-bottom: 12px; letter-spacing: 2px; }
+  .subtitle { font-size: 16px; opacity: 0.8; margin-bottom: 48px; }
+  .progress { width: 320px; max-width: 90vw; margin: 0 auto 24px; }
+  .bar {
+    height: 8px; background: rgba(255,255,255,0.2); border-radius: 4px;
+    overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .fill {
+    height: 100%; background: linear-gradient(90deg, #fff, #e0e7ff);
+    border-radius: 4px; transition: width 0.3s; width: 0%;
+    box-shadow: 0 0 12px rgba(255,255,255,0.4);
+  }
+  .status { font-size: 14px; opacity: 0.9; margin-top: 16px; }
+  .spinner {
+    display: inline-block; width: 18px; height: 18px; margin-right: 8px;
+    border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error {
+    display: none; background: rgba(255, 100, 100, 0.15);
+    border: 1px solid rgba(255, 150, 150, 0.3); border-radius: 12px;
+    padding: 24px; margin-top: 24px; backdrop-filter: blur(10px);
+  }
+  .error.show { display: block; }
+  .error h3 { margin-bottom: 12px; font-size: 18px; }
+  .error p { opacity: 0.8; margin-bottom: 16px; line-height: 1.5; }
+  .btn {
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3);
+    color: white; padding: 10px 24px; border-radius: 8px; cursor: pointer;
+    font-size: 14px; transition: all 0.2s; backdrop-filter: blur(10px);
+  }
+  .btn:hover { background: rgba(255,255,255,0.25); transform: translateY(-1px); }
+  .retry-btn { margin-right: 12px; }
+  .manual-btn { background: rgba(255,255,255,0.08); }
+  .tips {
+    margin-top: 24px; padding: 16px; background: rgba(255,255,255,0.08);
+    border-radius: 8px; font-size: 12px; opacity: 0.7; line-height: 1.5;
+  }
+  .tips h4 { margin-bottom: 8px; font-size: 13px; }
+  @media (max-width: 768px) {
+    h1 { font-size: 24px; }
+    .subtitle { font-size: 14px; }
+    .icon { font-size: 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="icon">☁️</div>
+  <h1>云盘分享管理工具</h1>
+  <p class="subtitle" id="subtitle">正在启动服务，请稍候...</p>
+
+  <div class="progress">
+    <div class="bar">
+      <div class="fill" id="fill"></div>
+    </div>
+    <div class="status" id="status">
+      <span class="spinner"></span>
+      <span id="statusText">检测服务状态</span>
+    </div>
+  </div>
+
+  <div class="error" id="error">
+    <h3 id="errorTitle">服务连接失败</h3>
+    <p id="errorMessage">无法连接到后端服务，请检查服务是否正常运行</p>
+    <div>
+      <button class="btn retry-btn" onclick="checkService()">重试</button>
+      <button class="btn manual-btn" onclick="openManual()">手动打开</button>
+    </div>
+    <div class="tips">
+      <h4>排查建议：</h4>
+      <div id="tipsContent">
+        1. 检查Python环境是否正常<br>
+        2. 查看5000端口是否被占用<br>
+        3. 检查 data/logs/app.log 日志文件
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = 'http://127.0.0.1:5000';
+  let checkCount = 0;
+  const maxChecks = 30;
+  let checking = false;
+
+  function updateProgress(percent, status) {
+    document.getElementById('fill').style.width = percent + '%';
+    if (status) document.getElementById('statusText').textContent = status;
+  }
+
+  function showError(title, message, tips) {
+    checking = false;
+    document.getElementById('error').classList.add('show');
+    document.getElementById('errorTitle').textContent = title;
+    document.getElementById('errorMessage').textContent = message;
+    if (tips) document.getElementById('tipsContent').innerHTML = tips;
+    document.getElementById('status').style.display = 'none';
+    updateProgress(100);
+  }
+
+  function hideError() {
+    document.getElementById('error').classList.remove('show');
+    document.getElementById('status').style.display = 'block';
+  }
+
+  function openManual() {
+    window.location.href = API + '/index.html';
+  }
+
+  async function checkService() {
+    if (checking) return;
+    checking = true;
+    hideError();
+
+    checkCount = 0;
+    const interval = setInterval(async () => {
+      checkCount++;
+      const progress = Math.min((checkCount / maxChecks) * 90, 90);
+      updateProgress(progress, `正在连接服务器 (${checkCount}/${maxChecks})...`);
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+        const response = await fetch(API + '/api/stats', {
+          method: 'GET',
+          signal: controller.signal,
+          cache: 'no-store',
+          mode: 'cors'
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          clearInterval(interval);
+          updateProgress(100, '服务连接成功，正在跳转...');
+          document.getElementById('subtitle').textContent = '服务已就绪，即将进入主界面';
+
+          setTimeout(() => {
+            window.location.href = API + '/index.html';
+          }, 800);
+          return;
+        }
+      } catch (error) {
+        // 连接失败，继续重试
+      }
+
+      if (checkCount >= maxChecks) {
+        clearInterval(interval);
+        showError(
+          '服务启动超时',
+          '等待服务响应超过30秒，服务可能启动失败',
+          '1. 检查Python环境是否正常<br>' +
+          '2. 查看5000端口是否被占用<br>' +
+          '3. 检查 data/logs/app.log 日志文件<br>' +
+          '4. 尝试重新启动程序'
+        );
+      }
+    }, 1000);
+  }
+
+  // 页面加载完成后开始检测
+  window.addEventListener('DOMContentLoaded', () => {
+    // 延迟一下再开始检测，给服务一点启动时间
+    setTimeout(checkService, 500);
+  });
+
+  // 页面可见性变化时重试
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && !checking) {
+      const errorShown = document.getElementById('error').classList.contains('show');
+      if (errorShown) {
+        // 如果显示错误，用户切换回页面时自动重试
+        setTimeout(checkService, 1000);
+      }
+    }
+  });
+</script>
+</body>
+</html>
