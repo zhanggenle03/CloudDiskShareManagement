@@ -113,7 +113,6 @@ class SyncManager:
             log.info(f"同步完成: 新增 {imported}, 更新 {updated}, 错误 {errors}")
 
             # 记录到导入日志
-            skipped = errors
             log_display = '网盘同步'
             if account_name and account_name.strip():
                 log_display = f'网盘同步-{account_name.strip()}'
@@ -123,7 +122,7 @@ class SyncManager:
                 source=source,
                 total=len(shares),
                 imported=imported,
-                skipped=skipped
+                skipped=updated
             )
 
             return {
@@ -193,7 +192,6 @@ class SyncManager:
             log.info(f"同步完成: 新增 {imported}, 更新 {updated}, 错误 {errors}")
 
             # 记录到导入日志
-            skipped = errors
             log_display = '网盘同步'
             if account_name and account_name.strip():
                 log_display = f'网盘同步-{account_name.strip()}'
@@ -203,7 +201,7 @@ class SyncManager:
                 source=source,
                 total=len(shares),
                 imported=imported,
-                skipped=skipped
+                skipped=updated
             )
 
             return {
