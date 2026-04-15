@@ -190,8 +190,6 @@
               margin: 3px; transition: all .15s; position: relative; }
   .tag-pill .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .tag-pill .del-pill { display: none; margin-left: 2px; opacity: .6; font-size: 11px; line-height: 1; }
-  .tag-pill:hover .del-pill { display: inline; }
-  .tag-pill .del-pill:hover { opacity: 1; color: var(--danger); }
   .tag-pill.no-color { background: var(--gray-100); color: var(--gray-600); }
   .tag-pill.no-color:hover { background: var(--primary-light); color: var(--primary); }
   .tag-pill.has-color:hover { filter: brightness(.92); }
@@ -201,7 +199,7 @@
   /* Tag colors on cards/rows */
   .tag { padding: 2px 8px; border-radius: 20px; font-size: 11px;
          display: inline-flex; align-items: center; gap: 3px; transition: all .15s; }
-  .tag.no-color { background: var(--primary-light); color: var(--primary); }
+  .tag.no-color { background: var(--gray-100); color: var(--gray-600); }
   .tag .del-tag { cursor: pointer; opacity: 0; font-size: 10px; margin-left: 1px; transition: opacity .15s; }
   .tag:hover .del-tag { opacity: .7; }
   .tag .del-tag:hover { opacity: 1; color: var(--danger); }
@@ -360,7 +358,7 @@
   .table-view { background: var(--bg-card); border-radius: var(--radius); box-shadow: var(--shadow);
                 overflow: hidden; }
   .table-view.hidden { display: none; }
-  .table-view table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .table-view table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
   .table-view thead th { background: var(--gray-50); padding: 10px 12px; text-align: left;
                          font-weight: 600; color: var(--gray-600); border-bottom: 2px solid var(--gray-200);
                          white-space: nowrap; position: sticky; top: 0; }
@@ -370,25 +368,42 @@
   .table-view tbody tr.selected { background: var(--primary-light); }
   .table-view tbody td { padding: 10px 12px; border-bottom: 1px solid var(--gray-100);
                           vertical-align: middle; }
-  .table-view .td-check { width: 36px; text-align: center; }
-  .table-view .td-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  .table-view .td-check { text-align: center; }
+  .table-view .td-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
                           font-weight: 500; }
-  .table-view .td-url { max-width: 280px; white-space: nowrap; }
-  .table-view .td-url a { color: var(--primary); text-decoration: none; font-size: 12px; max-width: 200px; display: inline-block; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
-  .table-view .td-url a:hover { text-decoration: underline; }
-  .table-view .td-meta { white-space: nowrap; }
-  .table-view .td-tags { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .table-view .td-notes { width: 44px; min-width: 44px; max-width: 44px; text-align: center; }
+  .table-view .td-url { display: flex; align-items: center; gap: 4px; overflow: visible; white-space: nowrap; }
+  .table-view .td-url .url-link { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+                                   color: var(--primary); text-decoration: none; font-size: 12px; }
+  .table-view .td-url .url-link:hover { text-decoration: underline; }
+  .table-view .td-url .copy-btn { flex-shrink: 0; }
+  .table-view .td-meta { white-space: nowrap; text-align: center; overflow: hidden; text-overflow: ellipsis; }
+  .table-view .td-time { min-width: 148px; overflow: visible; text-overflow: unset; white-space: nowrap; }
+  .table-view .td-tags { text-align: center; overflow: visible; padding: 6px 0; position: relative; }
+  .tags-wrap { display: flex; align-items: center; width: 100%;
+               overflow-x: auto; overflow-y: hidden;
+               scrollbar-width: none; /* Firefox 隐藏滚动条 */
+               -ms-overflow-style: none; /* IE/Edge */
+               padding-bottom: 3px; scroll-behavior: auto; }
+  .tags-wrap::-webkit-scrollbar { display: none; /* Chrome/Safari 隐藏滚动条 */ }
+  .tags-wrap-inner { display: flex; gap: 4px; white-space: nowrap; margin: auto; user-select: none; }
+  .tags-scroll-btn { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+                    width: 16px; height: 20px; border: none; border-radius: 4px; cursor: pointer;
+                    display: none; align-items: center; justify-content: center; font-size: 10px;
+                    background: var(--bg-card); color: var(--gray-500); box-shadow: 0 1px 4px rgba(0,0,0,.12);
+                    padding: 0; line-height: 1; }
+  .tags-scroll-btn:hover { background: var(--gray-100); color: var(--gray-700); }
+  .tags-scroll-btn.btn-l { left: 0; }
+  .tags-scroll-btn.btn-r { right: 0; }
+  .table-view .td-notes { text-align: center; }
   .table-view .td-notes .note-icon { font-size: 15px; cursor: default; display: inline-block; line-height: 1; }
   .table-view .td-actions { white-space: nowrap; text-align: center; position: relative; }
-  .table-view .td-source { width: 70px; text-align: center; }
+  .table-view .td-source { text-align: center; }
   .table-view .td-source .source-badge { min-width: 48px; text-align: center; margin: 0 auto; }
-  .table-view .td-account { width: 80px; text-align: center; font-size: 11px; color: var(--gray-500); }
-  .table-view .td-pwd { width: 80px; text-align: center; }
+  .table-view .td-account { text-align: center; font-size: 11px; color: var(--gray-500); }
+  .table-view .td-account-cell { text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 110px; }
+  .table-view .td-pwd { text-align: center; }
   .table-view .td-pwd .pwd-tag { min-width: 48px; text-align: center; margin: 0 auto; }
-  .table-view .td-meta { text-align: center; }
   .table-view .td-meta .expire-badge { margin: 0 auto; }
-  .table-view .td-tags { text-align: center; }
   .table-view .th-center { text-align: center; }
   /* ── 表格行操作下拉菜单 ── */
   .row-menu-btn { padding: 4px 10px; border: 1px solid var(--gray-200); border-radius: 6px;
@@ -656,17 +671,17 @@
         <table>
           <thead>
             <tr>
-              <th></th>
-              <th>文件名</th>
-              <th class="th-center">平台</th>
-              <th class="th-center">账号</th>
-              <th>链接</th>
-              <th class="th-center">提取码</th>
-              <th class="th-center">有效期</th>
-              <th class="th-center">分享时间</th>
-              <th class="th-center">标签</th>
-              <th class="th-center">备注</th>
-              <th class="th-center">操作</th>
+              <th style="width:36px"></th>
+              <th style="min-width:180px">文件名</th>
+              <th class="th-center" style="width:60px">平台</th>
+              <th class="th-center" style="width:110px">账号</th>
+              <th style="width:160px">链接</th>
+              <th class="th-center" style="width:90px">提取码</th>
+              <th class="th-center" style="width:90px">有效期</th>
+              <th class="th-center" style="width:148px;min-width:148px">分享时间</th>
+              <th class="th-center" style="width:100px">标签</th>
+              <th class="th-center" style="width:40px">备注</th>
+              <th class="th-center" style="width:44px">操作</th>
             </tr>
           </thead>
           <tbody id="tableBody"></tbody>
@@ -1470,6 +1485,7 @@ async function loadShares() {
     cardsGrid.classList.add('hidden');
     tableView.classList.remove('hidden');
     tableBody.innerHTML = data.data.map(renderTableRow).join('');
+    initTagsButtons();
   }
   renderPagination(data.total);
 }
@@ -1487,6 +1503,11 @@ function renderCard(item) {
   // 账号名称标签（显示在标题前面）
   const accountTag = item.account_name
     ? `<span class="account-name-tag">${escHtml(item.account_name)}</span>` : '';
+
+  // 备注（与列表一致，无备注显示📭）
+  const remarkHtml = item.notes
+    ? `<span class="note-icon" onmouseenter="showShareNoteTooltip(event,this)" data-note="${escHtml(item.notes)}" onmouseleave="hideRemarkTooltip()">📝</span>`
+    : '<span style="color:var(--gray-400)">📭</span>';
 
   const tagsHtml = item.tags
     ? item.tags.split(',').filter(t => t.trim()).map(t => getTagHtml(t.trim(), item.id)).join('')
@@ -1530,8 +1551,7 @@ function renderCard(item) {
       ${parentDirHtml}
     </div>
 
-    ${tagsHtml ? `<div class="card-tags">${tagsHtml}</div>` : ''}
-    ${notesHtml}
+    ${tagsHtml ? `<div class="card-tags">${remarkHtml} ${tagsHtml}</div>` : `<div class="card-tags">${remarkHtml}</div>`}
 
     <div class="card-actions">
       <button class="action-btn" onclick="openEditModal(${item.id})">✏️ 编辑</button>
@@ -1556,12 +1576,20 @@ function renderTableRow(item) {
     ? `<span class="td-account">${escHtml(item.account_name)}</span>`
     : '<span style="color:var(--gray-400)">—</span>';
 
-  // 文件名缩短显示（最长25字符）
-  const shortName = item.name.length > 25 ? item.name.slice(0, 25) + '…' : item.name;
+  // 文件名：完整显示，由CSS根据列宽自动省略
 
-  const tagsHtml = item.tags
-    ? item.tags.split(',').filter(t => t.trim()).map(t => getTagHtml(t.trim(), item.id)).join('')
-    : '<span style="color:var(--gray-400)">—</span>';
+  // 标签：容器固定宽度，横向排列，隐藏滚动条，左右按钮滑动
+  const tagList = item.tags ? item.tags.split(',').filter(t => t.trim()) : [];
+  let tagsHtml;
+  if (tagList.length === 0) {
+    tagsHtml = '<span style="color:var(--gray-400)">—</span>';
+  } else {
+    const allTags = tagList.map(t => getTagHtml(t.trim(), item.id)).join('');
+    const uid = 'tw-' + item.id;
+    tagsHtml = `<div class="tags-wrap" id="${uid}" onscroll="onTagsScroll('${uid}')"><div class="tags-wrap-inner">${allTags}</div></div>`
+      + `<button class="tags-scroll-btn btn-l" style="display:none" onmousedown="startTagsSlide('${uid}',-1)" onmouseup="stopTagsSlide()" onmouseleave="stopTagsSlide()" ontouchstart="startTagsSlide('${uid}',-1)" ontouchend="stopTagsSlide()">‹</button>`
+      + `<button class="tags-scroll-btn btn-r" style="display:none" onmousedown="startTagsSlide('${uid}',1)" onmouseup="stopTagsSlide()" onmouseleave="stopTagsSlide()" ontouchstart="startTagsSlide('${uid}',1)" ontouchend="stopTagsSlide()">›</button>`;
+  }
 
   const pwdHtml = item.pwd
     ? `<span class="pwd-tag" onclick="copyText('${escHtml(item.pwd)}',this)">🔑 ${escHtml(item.pwd)}</span>`
@@ -1573,21 +1601,21 @@ function renderTableRow(item) {
       <input type="checkbox" class="card-check" ${selectedAttr}
              onchange="toggleSelect(${item.id}, this)">
     </td>
-    <td class="td-name" title="${escHtml(item.name)}">${escHtml(shortName)}</td>
+    <td class="td-name" title="${escHtml(item.name)}">${escHtml(item.name)}</td>
     <td class="td-source"><span class="source-badge ${sourceClass}">${sourceName}</span></td>
-    <td>${accountCell}</td>
+    <td class="td-account-cell">${accountCell}</td>
     <td class="td-url">
-      <a href="${item.url}" target="_blank" title="${item.url}">${item.url}</a>
-      <button class="copy-btn" style="margin-left:4px" onclick="copyLinkOnly('${item.url}',this)">复制</button>
+      <a class="url-link" href="${item.url}" target="_blank" title="${item.url}">${item.url}</a>
+      <button class="copy-btn" onclick="copyLinkOnly('${item.url}',this)">复制</button>
     </td>
     <td class="td-pwd">${pwdHtml}</td>
     <td class="td-meta"><span class="expire-badge ${expireClass}">${item.expire || '未知'}</span></td>
-    <td class="td-meta">${item.share_time || '--'}</td>
+    <td class="td-meta td-time">${item.share_time || '--'}</td>
     <td class="td-tags">${tagsHtml}</td>
     <td class="td-notes">
       ${item.notes
         ? `<span class="note-icon" onmouseenter="showShareNoteTooltip(event,this)" data-note="${escHtml(item.notes)}" onmouseleave="hideRemarkTooltip()">📝</span>`
-        : '<span style="color:var(--gray-400)">—</span>'}
+        : '<span style="color:var(--gray-400)">📭</span>'}
     </td>
     <td class="td-actions">
       <button class="row-menu-btn" onclick="toggleRowMenu(event, this)">⋮</button>
@@ -2016,7 +2044,6 @@ async function loadStats() {
                       onclick="setTagFilter('${escHtml(tag)}', this)"
                       oncontextmenu="showTagContextMenu(event, '${escHtml(tag)}')">
           ${dotHtml}${escHtml(tag)}<span style="opacity:.6">${info.count}</span>
-          <span class="del-pill" onclick="event.stopPropagation();deleteTagEverywhere('${escHtml(tag)}')">×</span>
         </span>`;
       }).join('');
   } else {
@@ -2376,6 +2403,59 @@ async function doBatchTag() {
   toast(`已为 ${state.selected.size} 条添加标签「${tag}」`, 'success');
   closeModal('batchTagModal');
   loadShares(); loadStats();
+}
+
+// ── Tags slide buttons ──────────────────────────────────
+let tagsSlideTimer = null;
+
+// 检查标签容器滚动状态，显示/隐藏左右按钮
+function onTagsScroll(uid) {
+  const wrap = document.getElementById(uid);
+  if (!wrap) return;
+  const td = wrap.parentElement;
+  const btnL = td.querySelector('.btn-l');
+  const btnR = td.querySelector('.btn-r');
+  if (!btnL || !btnR) return;
+  const showL = wrap.scrollLeft > 2;
+  const showR = wrap.scrollLeft < wrap.scrollWidth - wrap.clientWidth - 2;
+  btnL.style.display = showL ? 'flex' : 'none';
+  btnR.style.display = showR ? 'flex' : 'none';
+}
+
+// 初始化标签按钮可见性（渲染后调用）
+function initTagsButtons() {
+  document.querySelectorAll('.tags-wrap').forEach(wrap => {
+    const uid = wrap.id;
+    if (!uid) return;
+    const td = wrap.parentElement;
+    const btnL = td.querySelector('.btn-l');
+    const btnR = td.querySelector('.btn-r');
+    if (!btnL || !btnR) return;
+    // 仅内容溢出时显示按钮
+    if (wrap.scrollWidth > wrap.clientWidth + 2) {
+      btnR.style.display = 'flex';
+    } else {
+      btnL.style.display = 'none';
+      btnR.style.display = 'none';
+    }
+  });
+}
+
+// 按住按钮持续滑动
+function startTagsSlide(uid, dir) {
+  stopTagsSlide();
+  const wrap = document.getElementById(uid);
+  if (!wrap) return;
+  const step = () => {
+    wrap.scrollLeft += dir * 4;
+    onTagsScroll(uid);
+    tagsSlideTimer = requestAnimationFrame(step);
+  };
+  step();
+}
+
+function stopTagsSlide() {
+  if (tagsSlideTimer) { cancelAnimationFrame(tagsSlideTimer); tagsSlideTimer = null; }
 }
 
 // ── Del tag from card ─────────────────────────────────────
@@ -3343,6 +3423,8 @@ function showShareNoteTooltip(event, el) {
   remarkTooltip.style.left = left + 'px';
   remarkTooltip.style.top = top + 'px';
 }
+
+
 
 function showAddAccountForm() {
   document.getElementById('newAccountName').value = '';

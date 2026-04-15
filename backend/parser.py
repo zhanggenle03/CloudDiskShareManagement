@@ -122,9 +122,17 @@ def extract_quark_url(text: str) -> str:
 def normalize_expire(expire: str) -> str:
     """标准化有效期字段"""
     expire = expire.strip()
+    # 已失效
     expired_keywords = ['已失效', '分享已过期', '分享失败']
     if any(k in expire for k in expired_keywords):
         return '已失效'
+    # 永久有效
+    if expire == '永久有效':
+        return '永久有效'
+    # "N天后过期" → "N天有效"
+    m = re.match(r'^(\d+)\s*天\s*后\s*过\s*期\s*$', expire)
+    if m:
+        return f'{m.group(1)}天有效'
     return expire
 
 

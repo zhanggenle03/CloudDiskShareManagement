@@ -327,7 +327,7 @@ class BaiduShareManager:
                     remaining_hours = int((remaining_seconds % 86400) / 3600)
                     
                     if remaining_days > 0:
-                        return f'{remaining_days}天后过期'
+                        return f'{remaining_days}天有效'
                     elif remaining_hours > 0:
                         return f'{remaining_hours}小时后过期'
                     else:

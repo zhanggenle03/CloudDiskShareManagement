@@ -327,10 +327,8 @@ class QuarkShareManager(QuarkBase):
                 remaining_days = int(remaining_seconds / 86400)
                 if remaining_days == 0:
                     return '今天失效'
-                elif remaining_days == 1:
-                    return '1天后失效'
                 else:
-                    return f'{remaining_days}天后失效'
+                    return f'{remaining_days}天有效'
             else:
                 return '永久有效'  # 默认当作永久有效
         except Exception as e:
@@ -346,12 +344,15 @@ class QuarkShareManager(QuarkBase):
         # 永久有效
         if any(k in text for k in ['永久有效', 'forever', 'permanent']):
             return '永久有效'
-        # 剩余天数（如 "7天后失效"、"6天后失效"）
+        # 剩余天数（如 "7天后失效"、"6天后失效"、"7天有效"）
         match = re.search(r'(\d+)\s*天', text)
         if match:
             days = int(match.group(1))
             if days > 0:
-                return f'{days}天后失效'
+                # 已经是"N天有效"格式则保持
+                if '有效' in text:
+                    return text
+                return f'{days}天有效'
         # 已经是完整表述（如"1天有效"）
         if '天' in text:
             return text
