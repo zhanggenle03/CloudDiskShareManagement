@@ -359,7 +359,7 @@
 
   /* ── List / Table View ── */
   .table-view { background: var(--bg-card); border-radius: var(--radius); box-shadow: var(--shadow);
-                overflow: clip; }
+                overflow: visible; }
   .table-view.hidden { display: none; }
   .table-view table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
   .table-view thead th { background: var(--gray-50); padding: 10px 12px; text-align: left;
@@ -418,6 +418,7 @@
                  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12);
                  min-width: 120px; padding: 4px 0; display: none; }
   .row-dropdown.show { display: block; }
+  .row-dropdown.dropup { top: auto; bottom: 100%; }
   .row-dropdown-item { display: flex; align-items: center; gap: 6px; padding: 8px 12px;
                       font-size: 13px; color: var(--text-primary); cursor: pointer;
                       transition: background .12s; white-space: nowrap; }
@@ -1646,10 +1647,24 @@ function toggleRowMenu(e, btn) {
   const dropdown = btn.nextElementSibling;
   if (dropdown === activeRowMenu) {
     dropdown.classList.remove('show');
+    dropdown.classList.remove('dropup');
     activeRowMenu = null;
   } else {
-    if (activeRowMenu) activeRowMenu.classList.remove('show');
+    if (activeRowMenu) { activeRowMenu.classList.remove('show'); activeRowMenu.classList.remove('dropup'); }
     dropdown.classList.add('show');
+    // 检测下拉菜单是否会超出滚动容器底部，如果会则向上展开
+    requestAnimationFrame(() => {
+      const scrollArea = dropdown.closest('.data-scroll-area');
+      if (scrollArea) {
+        const scrollRect = scrollArea.getBoundingClientRect();
+        const dropRect = dropdown.getBoundingClientRect();
+        if (dropRect.bottom > scrollRect.bottom) {
+          dropdown.classList.add('dropup');
+        } else {
+          dropdown.classList.remove('dropup');
+        }
+      }
+    });
     activeRowMenu = dropdown;
   }
 }
