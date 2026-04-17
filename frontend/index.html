@@ -359,12 +359,12 @@
 
   /* ── List / Table View ── */
   .table-view { background: var(--bg-card); border-radius: var(--radius); box-shadow: var(--shadow);
-                overflow: hidden; }
+                overflow: clip; }
   .table-view.hidden { display: none; }
   .table-view table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
   .table-view thead th { background: var(--gray-50); padding: 10px 12px; text-align: left;
                          font-weight: 600; color: var(--gray-600); border-bottom: 2px solid var(--gray-200);
-                         white-space: nowrap; position: sticky; top: 0; }
+                         white-space: nowrap; position: sticky; top: 0; z-index: 1; }
   .table-view tbody tr { transition: background .12s; }
   .table-view tbody tr:hover { background: var(--primary-light); }
   .table-view tbody tr.expired { opacity: .55; }
