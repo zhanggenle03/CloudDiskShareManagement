@@ -1175,7 +1175,7 @@
                 <span>Cookie</span>
                 <span style="font-size:11px;color:var(--gray-400);">可选</span>
               </label>
-              <input type="password" id="newAccountCookie" placeholder="粘贴夸克网盘Cookie(以_pans_pid或pcsid开头)"
+              <input type="password" id="newAccountCookie" placeholder="粘贴网盘Cookie"
                      style="width:100%;padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:12px;font-family:monospace;outline:none;"
                      oninput="updateNewCookieHint()">
               <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
@@ -1224,7 +1224,7 @@
         <span>Cookie</span>
         <span style="font-size:11px;color:var(--gray-400);" id="editCookieStatus"></span>
       </label>
-      <input type="password" id="editAccountCookie" placeholder="粘贴夸克网盘Cookie(以_pans_pid或pcsid开头)" 
+      <input type="password" id="editAccountCookie" placeholder="粘贴网盘Cookie" 
              style="width:100%;padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:12px;font-family:monospace;outline:none;"
              oninput="updateEditCookieHint()">
       <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
@@ -3081,10 +3081,10 @@ async function showGeneralSettingsModal() {
         <div style="font-size:12px;color:var(--gray-400);margin-top:2px;">备份所有数据（分享记录、账号、设置、标签、资源等）</div>
       </div>
       <div style="display:flex;gap:10px;">
-        <button class="btn btn-primary" onclick="exportBackup()" style="flex:1;font-size:13px;padding:8px 16px;">
+        <button class="btn" onclick="exportBackup()" style="flex:1;font-size:13px;padding:8px 16px;background:var(--primary);color:#fff;border:1px solid var(--primary);">
           📥 导出备份
         </button>
-        <button class="btn" onclick="document.getElementById('restoreFileInput').click()" style="flex:1;font-size:13px;padding:8px 16px;border:1px solid var(--border);">
+        <button class="btn" onclick="document.getElementById('restoreFileInput').click()" style="flex:1;font-size:13px;padding:8px 16px;background:var(--primary);color:#fff;border:1px solid var(--primary);">
           📤 恢复数据
         </button>
         <input type="file" id="restoreFileInput" accept=".json" style="display:none;" onchange="importBackup(this)">
@@ -3879,6 +3879,14 @@ function showAddAccountForm() {
   document.getElementById('newAccountCookie').type = 'password';
   document.getElementById('toggleNewCookieBtn').textContent = '显示';
   document.getElementById('newCookieHint').textContent = '';
+  // 根据平台动态设置Cookie输入框提示
+  const platform = accountState.currentPlatform || 'quark';
+  const cookieInput = document.getElementById('newAccountCookie');
+  if (platform === 'baidu') {
+    cookieInput.placeholder = '粘贴百度网盘Cookie(以BAIDUID开头)';
+  } else {
+    cookieInput.placeholder = '粘贴夸克网盘Cookie(以_pans_pid或pcsid开头)';
+  }
   
   // 更新字数统计
   updateNewNameCount();
@@ -4001,7 +4009,10 @@ function startEditAccount(accountId) {
     cookieStatus.textContent = '';
     cookieHint.textContent = '';
   } else {
-    cookieInput.placeholder = '粘贴夸克网盘Cookie(以_pans_pid或pcsid开头)';
+    const platform = acc.platform || accountState.currentPlatform || 'quark';
+    cookieInput.placeholder = platform === 'baidu'
+      ? '粘贴百度网盘Cookie(以BAIDUID开头)'
+      : '粘贴夸克网盘Cookie(以_pans_pid或pcsid开头)';
     cookieStatus.textContent = '';
     cookieHint.textContent = '留空则不设置Cookie';
   }
