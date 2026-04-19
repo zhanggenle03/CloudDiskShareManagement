@@ -251,6 +251,8 @@
   .btn-primary:hover { background: #3B56D9; }
   .btn-danger { background: var(--danger); color: #fff; }
   .btn-danger:hover { background: #DC2626; }
+  .btn-warning { background: var(--warning); color: #fff; }
+  .btn-warning:hover { background: #D97706; }
   .btn-ghost { background: var(--gray-100); color: var(--gray-600); }
   .btn-ghost:hover { background: var(--gray-200); }
 
@@ -353,6 +355,7 @@
                 text-align: center; transition: all .15s; }
   .action-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
   .action-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,.1); }
+  .action-btn.warning:hover { border-color: var(--warning); color: var(--warning); background: rgba(245,158,11,.1); }
 
   /* Parent dir info */
   .parent-dir { font-size: 11px; color: var(--gray-400); display: flex; align-items: center; gap: 3px; }
@@ -367,7 +370,7 @@
                          white-space: nowrap; position: sticky; top: 0; z-index: 1; }
   .table-view tbody tr { transition: background .12s; }
   .table-view tbody tr:hover { background: var(--primary-light); }
-  .table-view tbody tr.expired { opacity: .55; }
+  .table-view tbody tr.expired td:not(.td-actions) { opacity: .55; }
   .table-view tbody tr.selected { background: var(--primary-light); }
   .table-view tbody td { padding: 10px 12px; border-bottom: 1px solid var(--gray-100);
                           vertical-align: middle; }
@@ -425,6 +428,8 @@
   .row-dropdown-item:hover { background: var(--gray-50); }
   .row-dropdown-item.danger { color: var(--danger); }
   .row-dropdown-item.danger:hover { background: rgba(239,68,68,.06); }
+  .row-dropdown-item.warning { color: var(--warning); }
+  .row-dropdown-item.warning:hover { background: rgba(245,158,11,.06); }
 
   /* ── Pagination ── */
   .pagination { display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -643,6 +648,7 @@
           <button class="btn btn-primary" id="addResourceBtn" onclick="showAddResourceModal()" style="display:none;padding:6px 14px;font-size:13px;">+ 新建资源</button>
           <div id="batchActions" style="display:none;gap:10px;align-items:center;margin-left:12px;">
             <button class="btn btn-primary" onclick="showBatchTagModal()" style="padding:6px 14px;font-size:13px;">🏷️ 批量添加标签</button>
+            <button class="btn btn-warning" id="batchCancelShareBtn" onclick="batchCancelShare()" style="padding:6px 14px;font-size:13px;">🚫 取消分享</button>
             <button class="btn btn-danger" onclick="batchDeleteSelected()" style="padding:6px 14px;font-size:13px;">🗑 删除选中</button>
           </div>
           <div id="batchResourceActions" style="display:none;gap:10px;align-items:center;margin-left:12px;">
@@ -1562,6 +1568,7 @@ function renderCard(item) {
     <div class="card-actions">
       <button class="action-btn" onclick="openEditModal(${item.id})">✏️ 编辑</button>
       <button class="action-btn" onclick="copyShare('${escHtml(item.name)}','${item.url}','${item.pwd||''}')">🔗 分享复制</button>
+      <button class="action-btn warning" onclick="cancelShare(${item.id}, '${escHtml(item.name)}')">🚫 取消分享</button>
       <button class="action-btn danger" onclick="softDelete(${item.id})">🗑 删除</button>
     </div>
   </div>`;
@@ -1628,6 +1635,7 @@ function renderTableRow(item) {
       <div class="row-dropdown" id="menu-${item.id}">
         <div class="row-dropdown-item" onclick="openEditModal(${item.id}); closeRowMenu(this)">✏️ 编辑</div>
         <div class="row-dropdown-item" onclick="copyShare('${escHtml(item.name)}','${item.url}','${item.pwd||''}',this); closeRowMenu(this)">🔗 分享复制</div>
+        <div class="row-dropdown-item warning" onclick="cancelShare(${item.id}, '${escHtml(item.name)}'); closeRowMenu(this)">🚫 取消分享</div>
         <div class="row-dropdown-item danger" onclick="softDelete(${item.id}); closeRowMenu(this)">🗑 删除</div>
       </div>
     </td>
@@ -2232,6 +2240,18 @@ async function softDelete(id) {
   loadShares(); loadStats();
 }
 
+// ── Cancel Share ──────────────────────────────────────────
+// TODO: 后续实现调用网盘API取消分享的逻辑
+async function cancelShare(id, name) {
+  toast('取消分享功能即将上线', 'warning');
+}
+
+// TODO: 后续实现批量调用网盘API取消分享的逻辑
+async function batchCancelShare() {
+  if (state.selected.size === 0) return;
+  toast(`取消分享功能即将上线（已选 ${state.selected.size} 条）`, 'warning');
+}
+
 // ── Select ────────────────────────────────────────────────
 function toggleSelect(id, checkbox) {
   if (checkbox.checked) state.selected.add(id);
@@ -2272,6 +2292,7 @@ function updateBatchUI() {
   const batchEl = document.getElementById('batchActions');
   batchEl.style.display = count > 0 ? 'flex' : 'none';
   if (count > 0) {
+    document.getElementById('batchCancelShareBtn').textContent = `🚫 取消分享 (${count})`;
     batchEl.querySelector('button:last-child').textContent = `🗑 删除 (${count})`;
   }
 }
