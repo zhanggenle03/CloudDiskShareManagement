@@ -274,6 +274,155 @@ class BaiduShareManager:
             log.error(traceback.format_exc())
             return None
 
+    def get_bdstoken(self) -> str:
+        """
+        获取bdstoken（百度网盘操作令牌）
+        通过访问百度网盘首页，从响应中提取bdstoken
+        :return: bdstoken字符串，失败返回空字符串
+        """
+        url = 'https://pan.baidu.com/disk/main'
+        params = self.base_params.copy()
+        
+        try:
+            response = self.session.get(url, headers={
+                **self.headers,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }, params=params, timeout=30)
+            
+            text = response.text
+            
+            # 尝试从HTML中提取bdstoken
+            # 方式1: 从JavaScript变量中提取
+            import re
+            match = re.search(r'bdstoken["\s:=]+["\']?([a-f0-9]{32})', text)
+            if match:
+                bdstoken = match.group(1)
+                log.info(f"获取bdstoken成功: {bdstoken[:8]}...")
+                return bdstoken
+            
+            # 方式2: 从URL参数中提取（如果页面做了重定向）
+            match = re.search(r'bdstoken=([a-f0-9]{32})', text)
+            if match:
+                bdstoken = match.group(1)
+                log.info(f"从URL参数获取bdstoken成功: {bdstoken[:8]}...")
+                return bdstoken
+            
+            # 方式3: 尝试通过API获取
+            api_url = 'https://pan.baidu.com/api/quota'
+            api_params = self.base_params.copy()
+            api_params['app_id'] = '250528'
+            response2 = self.session.get(api_url, headers=self.headers, params=api_params, timeout=30)
+            result = response2.json()
+            if result.get('errno') == 0 and 'bdstoken' in result:
+                bdstoken = result['bdstoken']
+                log.info(f"从API获取bdstoken成功: {bdstoken[:8]}...")
+                return bdstoken
+            
+            log.warning(f"获取bdstoken失败: 无法从页面或API中提取")
+            return ''
+            
+        except Exception as e:
+            log.error(f"获取bdstoken出错: {e}")
+            return ''
+
+    def cancel_share(self, share_ids: list) -> dict:
+        """
+        取消百度网盘分享
+        接口地址: https://pan.baidu.com/share/cancel
+        请求方法: POST (application/x-www-form-urlencoded)
+        
+        关键参数:
+        - channel=chunlei: 渠道标识
+        - bdstoken: 登录令牌（必须与Cookie匹配）
+        - app_id=250528: 百度网盘AppID
+        - shareid_list: [12345678, 87654321] 格式的字符串
+        
+        错误码:
+        - errno: 0 成功
+        - errno: -6 身份验证失败
+        - errno: 12 参数错误
+        
+        :param share_ids: 要取消的分享shareId列表（数字字符串或整数）
+        :return: {'success': bool, 'message': str, 'cancelled': int, 'failed': int}
+        """
+        if not share_ids:
+            return {'success': False, 'message': '未指定要取消的分享ID', 'cancelled': 0, 'failed': 0}
+
+        # 先获取bdstoken
+        bdstoken = self.get_bdstoken()
+        if not bdstoken:
+            log.error("获取bdstoken失败，无法取消分享")
+            return {'success': False, 'message': '获取bdstoken失败，请检查Cookie是否有效', 'cancelled': 0, 'failed': len(share_ids)}
+
+        url = 'https://pan.baidu.com/share/cancel'
+        params = self.base_params.copy()
+        params.update({
+            'bdstoken': bdstoken,
+            'app_id': '250528',
+        })
+        
+        cancelled = 0
+        failed = 0
+        errors = []
+
+        # 百度支持批量取消，每次最多处理20个
+        batch_size = 20
+        for i in range(0, len(share_ids), batch_size):
+            batch = share_ids[i:i+batch_size]
+            # shareid_list 格式: [12345, 67890]
+            shareid_list_str = '[' + ','.join(str(sid) for sid in batch) + ']'
+            
+            data = {
+                'shareid_list': shareid_list_str
+            }
+            
+            # 百度使用 application/x-www-form-urlencoded 格式
+            headers = {
+                **self.headers,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+            
+            try:
+                response = self.session.post(url, headers=headers, params=params, data=data, timeout=30)
+                result = response.json()
+                
+                if result.get('errno') == 0:
+                    cancelled += len(batch)
+                    log.info(f"百度批量取消分享成功: {len(batch)} 条")
+                elif result.get('errno') == -6:
+                    log.error("百度取消分享失败: Cookie已失效(errno=-6)")
+                    failed += len(batch)
+                    errors.append("Cookie已失效(errno=-6)")
+                    break
+                elif result.get('errno') == 12:
+                    log.error(f"百度取消分享失败: 参数错误(errno=12), shareid_list={shareid_list_str}")
+                    failed += len(batch)
+                    errors.append("参数错误(errno=12)")
+                else:
+                    msg = result.get('errmsg', f"errno={result.get('errno')}")
+                    log.warning(f"百度取消分享失败: {msg}, shareid_list={shareid_list_str}")
+                    failed += len(batch)
+                    errors.append(str(msg))
+                    
+            except Exception as e:
+                log.error(f"百度取消分享请求出错: {e}")
+                failed += len(batch)
+                errors.append(f"请求出错: {str(e)}")
+
+        success = cancelled > 0
+        message = f"取消完成：成功 {cancelled} 条"
+        if failed > 0:
+            message += f"，失败 {failed} 条"
+        if errors:
+            message += f"（{'; '.join(errors[:3])}）"
+
+        return {
+            'success': success,
+            'message': message,
+            'cancelled': cancelled,
+            'failed': failed
+        }
+
     def _parse_expire_info(self, share_data):
         """
         解析百度网盘分享过期信息

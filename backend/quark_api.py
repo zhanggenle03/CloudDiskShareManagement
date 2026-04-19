@@ -335,6 +335,65 @@ class QuarkShareManager(QuarkBase):
             log.warning(f"解析过期信息出错: {e}")
             return '永久有效'
 
+    def cancel_share(self, share_ids: list) -> dict:
+        """
+        取消（删除）分享
+        接口地址: https://drive-pc.quark.cn/1/clouddrive/share/delete?pr=ucpro&fr=pc&uc_param_str=
+        请求方法: POST
+        请求体: {"share_ids": ["share_id1", "share_id2", ...]}
+        :param share_ids: 要取消的分享ID列表
+        :return: {'success': bool, 'message': str, 'cancelled': int, 'failed': int}
+        """
+        if not share_ids:
+            return {'success': False, 'message': '未指定要取消的分享ID', 'cancelled': 0, 'failed': 0}
+
+        url = 'https://drive-pc.quark.cn/1/clouddrive/share/delete'
+        params = self.base_params.copy()
+        
+        cancelled = 0
+        failed = 0
+        errors = []
+
+        # 逐个取消，避免批量接口的一次性失败
+        for sid in share_ids:
+            data = {"share_ids": [sid]}
+            try:
+                response = self.session.post(url, headers=self.headers, params=params, json=data, timeout=30)
+                result = response.json()
+                
+                if result.get('status') == 200 or result.get('code') == 0:
+                    cancelled += 1
+                    log.info(f"夸克取消分享成功: share_id={sid}")
+                elif result.get('status') == 401:
+                    log.error(f"夸克取消分享失败: Cookie已失效(401), share_id={sid}")
+                    failed += 1
+                    errors.append(f"share_id={sid}: Cookie已失效")
+                    # Cookie失效，后续也会失败，直接中断
+                    break
+                else:
+                    msg = result.get('message', '未知错误')
+                    log.warning(f"夸克取消分享失败: share_id={sid}, status={result.get('status')}, message={msg}")
+                    failed += 1
+                    errors.append(f"share_id={sid}: {msg}")
+            except Exception as e:
+                log.error(f"夸克取消分享请求出错: share_id={sid}, error={e}")
+                failed += 1
+                errors.append(f"share_id={sid}: 请求出错")
+
+        success = cancelled > 0
+        message = f"取消完成：成功 {cancelled} 条"
+        if failed > 0:
+            message += f"，失败 {failed} 条"
+        if errors:
+            message += f"（{'; '.join(errors[:3])}）"
+
+        return {
+            'success': success,
+            'message': message,
+            'cancelled': cancelled,
+            'failed': failed
+        }
+
     def _normalize_status_text(self, text: str) -> str:
         """标准化夸克API返回的状态文本"""
         text = text.strip()

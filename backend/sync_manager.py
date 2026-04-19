@@ -3,6 +3,7 @@
 支持手动同步
 """
 import os
+import traceback
 from typing import Optional
 from logger import setup_logger
 from quark_api import QuarkShareManager
@@ -59,7 +60,7 @@ class SyncManager:
         
         return self.sync_quark_with_cookie(cookie)
     
-    def sync_quark_with_cookie(self, cookie: str, account_name: str = None) -> dict:
+    def sync_quark_with_cookie(self, cookie: str, account_name: str = None, account_id: int = 0) -> dict:
         """使用指定Cookie执行夸克网盘同步"""
         if not cookie or len(cookie) < 50:
             return {'success': False, 'message': 'Cookie未配置或格式不正确'}
@@ -100,6 +101,15 @@ class SyncManager:
                     if account_name and account_name.strip():
                         share_info['account_name'] = account_name.strip()[:7]
 
+                    # 设置网盘端share_id（夸克用share_id字段）
+                    quark_share_id = share_data.get('share_id') or share_data.get('id') or ''
+                    if quark_share_id:
+                        share_info['share_id'] = str(quark_share_id)
+
+                    # 设置account_id（关联账号ID）
+                    if account_id:
+                        share_info['account_id'] = account_id
+
                     result = upsert_share(share_info)
                     if result['action'] == 'inserted':
                         imported += 1
@@ -138,7 +148,7 @@ class SyncManager:
             log.error(f"同步失败: {e}")
             return {'success': False, 'message': f'同步失败: {str(e)}'}
 
-    def sync_baidu_with_cookie(self, cookie: str, account_name: str = None) -> dict:
+    def sync_baidu_with_cookie(self, cookie: str, account_name: str = None, account_id: int = 0) -> dict:
         """使用指定Cookie执行百度网盘同步"""
         if not cookie or len(cookie) < 50:
             return {'success': False, 'message': 'Cookie未配置或格式不正确'}
@@ -179,6 +189,15 @@ class SyncManager:
                     if account_name and account_name.strip():
                         share_info['account_name'] = account_name.strip()[:7]
 
+                    # 设置网盘端share_id（百度用shareId字段）
+                    baidu_share_id = share_data.get('shareId') or ''
+                    if baidu_share_id:
+                        share_info['share_id'] = str(baidu_share_id)
+
+                    # 设置account_id（关联账号ID）
+                    if account_id:
+                        share_info['account_id'] = account_id
+
                     result = upsert_share(share_info)
                     if result['action'] == 'inserted':
                         imported += 1
@@ -218,18 +237,19 @@ class SyncManager:
             log.error(traceback.format_exc())
             return {'success': False, 'message': f'同步失败: {str(e)}'}
 
-    def sync_with_cookie(self, platform: str, cookie: str, account_name: str = None) -> dict:
+    def sync_with_cookie(self, platform: str, cookie: str, account_name: str = None, account_id: int = 0) -> dict:
         """
         通用同步方法，根据平台选择同步方式
         :param platform: 平台类型 ('quark' 或 'baidu')
         :param cookie: Cookie字符串
         :param account_name: 账号名称（可选）
+        :param account_id: 账号ID（可选，用于关联分享记录）
         :return: 同步结果
         """
         if platform == 'quark':
-            return self.sync_quark_with_cookie(cookie, account_name)
+            return self.sync_quark_with_cookie(cookie, account_name, account_id)
         elif platform == 'baidu':
-            return self.sync_baidu_with_cookie(cookie, account_name)
+            return self.sync_baidu_with_cookie(cookie, account_name, account_id)
         else:
             return {'success': False, 'message': f'不支持的平台类型: {platform}'}
 

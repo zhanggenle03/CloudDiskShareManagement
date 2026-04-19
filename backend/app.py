@@ -145,6 +145,191 @@ def batch_del():
     batch_delete(ids, hard=hard)
     return jsonify({'success': True, 'count': len(ids)})
 
+# ─── 辅助函数：为分享记录添加标签 ────────────────────────────────
+def _add_tag_to_share(share_id: int, tag: str):
+    """为指定分享记录添加标签（去重，逗号分隔）"""
+    conn = get_conn()
+    row = conn.execute("SELECT tags FROM shares WHERE id=?", (share_id,)).fetchone()
+    if row:
+        existing_tags = [t.strip() for t in (row['tags'] or '').split(',') if t.strip()]
+        if tag not in existing_tags:
+            existing_tags.append(tag)
+            new_tags = ','.join(existing_tags)
+            conn.execute("UPDATE shares SET tags=?, updated_at=datetime('now','localtime') WHERE id=?",
+                         (new_tags, share_id))
+            conn.commit()
+    conn.close()
+
+# ─── 取消分享（同步取消网盘端分享）────────────────────────────
+@app.route('/api/shares/cancel', methods=['POST'])
+def cancel_shares():
+    """
+    取消分享：同步调用网盘API取消分享，成功后删除本地记录
+    
+    请求体:
+    {
+        "ids": [1, 2, 3],        // 本地分享记录ID列表
+        "sync": true              // 是否同步取消网盘端分享（默认true）
+    }
+    
+    返回:
+    {
+        "success": true,
+        "cancelled": 5,           // 网盘端成功取消数（本地已删除）
+        "failed": 0,              // 网盘端取消失败数
+        "local_deleted": 5,       // 本地硬删除数
+        "no_share_id": 1,         // 缺少网盘端share_id的记录数（已添加标签）
+        "no_cookie": 0,           // 缺少Cookie的记录数（已添加标签）
+        "details": [...]          // 各记录的处理结果
+    }
+    """
+    data = request.get_json()
+    ids = data.get('ids', [])
+    sync_to_cloud = data.get('sync', True)
+    
+    if not ids:
+        return jsonify({'error': '未指定ID'}), 400
+    
+    log.info(f'取消分享: count={len(ids)}, sync={sync_to_cloud}')
+    
+    # 查询所有待取消的分享记录
+    conn = get_conn()
+    placeholders = ','.join('?' * len(ids))
+    rows = conn.execute(
+        f"SELECT id, source, url, name, share_id, account_id, expire FROM shares WHERE id IN ({placeholders}) AND is_deleted=0",
+        ids
+    ).fetchall()
+    conn.close()
+    
+    if not rows:
+        return jsonify({'error': '未找到有效的分享记录'}), 404
+    
+    # 按账号分组（同一账号的分享可以批量取消）
+    # key: (platform, account_id), value: [(row_dict, share_id), ...]
+    account_groups = {}
+    no_share_id_records = []
+    details = []
+    
+    for row in rows:
+        r = dict(row)
+        source = r.get('source', '')
+        platform = source.split(':')[0] if ':' in source else source
+        share_id = r.get('share_id', '') or ''
+        account_id = r.get('account_id', 0) or 0
+        
+        if not share_id:
+            no_share_id_records.append(r)
+            # 不删除本地记录，不标记失效，仅添加标签"取消分享失败"
+            _add_tag_to_share(r['id'], '取消分享失败')
+            details.append({
+                'id': r['id'], 'name': r['name'],
+                'status': 'no_share_id',
+                'reason': '缺少网盘端分享ID（CSV导入的记录无法取消网盘端分享），已添加标签"取消分享失败"'
+            })
+            continue
+        
+        key = (platform, account_id)
+        if key not in account_groups:
+            account_groups[key] = []
+        account_groups[key].append((r, share_id))
+    
+    # 对每个账号组，获取Cookie并调用取消API
+    total_cancelled = 0
+    total_failed = 0
+    total_no_cookie = 0
+    local_deleted_ids = []  # 成功取消后硬删除的ID
+    
+    for (platform, account_id), items in account_groups.items():
+        # 获取账号Cookie
+        cookie = ''
+        account_name = ''
+        if account_id:
+            account = get_account(account_id)
+            if account:
+                cookie = account.get('cookie', '') or ''
+                account_name = account.get('name', '')
+        
+        if not cookie or len(cookie) < 50:
+            total_no_cookie += len(items)
+            for r, sid in items:
+                # 不删除本地记录，添加标签"取消分享失败"
+                _add_tag_to_share(r['id'], '取消分享失败')
+                details.append({
+                    'id': r['id'], 'name': r['name'],
+                    'status': 'no_cookie',
+                    'reason': f'账号"{account_name}"Cookie未配置或已失效，已添加标签"取消分享失败"'
+                })
+            continue
+        
+        # 收集该账号下的所有share_id
+        share_ids = [sid for _, sid in items]
+        id_to_row = {sid: r for r, sid in items}
+        
+        # 调用对应平台的取消API
+        try:
+            if platform == 'quark':
+                from quark_api import QuarkShareManager
+                manager = QuarkShareManager(cookie)
+                result = manager.cancel_share(share_ids)
+            elif platform == 'baidu':
+                from baidu_api import BaiduShareManager
+                manager = BaiduShareManager(cookie)
+                result = manager.cancel_share(share_ids)
+            else:
+                result = {'success': False, 'message': f'不支持的平台: {platform}', 'cancelled': 0, 'failed': len(share_ids)}
+        except Exception as e:
+            log.error(f'调用取消分享API出错: {e}')
+            result = {'success': False, 'message': str(e), 'cancelled': 0, 'failed': len(share_ids)}
+        
+        total_cancelled += result.get('cancelled', 0)
+        total_failed += result.get('failed', 0)
+        
+        # 更新本地记录：成功取消的硬删除，失败的添加标签
+        for r, sid in items:
+            # 如果网盘端取消成功，硬删除本地记录
+            if result.get('success') or not sync_to_cloud:
+                local_deleted_ids.append(r['id'])
+                details.append({
+                    'id': r['id'], 'name': r['name'],
+                    'status': 'cancelled',
+                    'reason': '网盘端分享已取消，本地记录已删除' if sync_to_cloud else '仅本地删除记录'
+                })
+            else:
+                # 网盘端取消失败，不删除本地记录，添加标签"取消分享失败"
+                _add_tag_to_share(r['id'], '取消分享失败')
+                details.append({
+                    'id': r['id'], 'name': r['name'],
+                    'status': 'failed',
+                    'reason': result.get('message', '取消失败') + '，已添加标签"取消分享失败"'
+                })
+    
+    # 批量硬删除成功取消的本地记录
+    if local_deleted_ids:
+        batch_delete(local_deleted_ids, hard=True)
+        log.info(f'已硬删除 {len(local_deleted_ids)} 条本地记录（网盘端取消成功）')
+    
+    # 构建提示消息
+    msg_parts = []
+    if total_cancelled > 0:
+        msg_parts.append(f'成功取消 {total_cancelled} 条（本地已删除）')
+    if len(no_share_id_records) > 0:
+        msg_parts.append(f'{len(no_share_id_records)} 条无网盘ID（已标记"取消分享失败"）')
+    if total_no_cookie > 0:
+        msg_parts.append(f'{total_no_cookie} 条Cookie缺失（已标记"取消分享失败"）')
+    if total_failed > 0:
+        msg_parts.append(f'{total_failed} 条网盘端取消失败（已标记"取消分享失败"）')
+    
+    return jsonify({
+        'success': len(local_deleted_ids) > 0 or len(no_share_id_records) > 0 or total_no_cookie > 0,
+        'cancelled': total_cancelled,
+        'failed': total_failed,
+        'local_deleted': len(local_deleted_ids),
+        'no_share_id': len(no_share_id_records),
+        'no_cookie': total_no_cookie,
+        'details': details,
+        'message': '，'.join(msg_parts) if msg_parts else '取消分享完成'
+    })
+
 # ─── 统计 ────────────────────────────────────────────────────
 @app.route('/api/stats', methods=['GET'])
 def stats():
@@ -571,7 +756,7 @@ def sync_now():
             return jsonify({'success': False, 'error': '账号平台类型无效'}), 400
         
         sync_mgr = get_sync_manager()
-        result = sync_mgr.sync_with_cookie(platform, cookie, account_name)
+        result = sync_mgr.sync_with_cookie(platform, cookie, account_name, account_id=account_id)
     else:
         # 兼容旧逻辑：使用全局Cookie（仅夸克）
         sync_mgr = get_sync_manager()

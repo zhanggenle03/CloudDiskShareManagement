@@ -2350,16 +2350,30 @@ async function cancelShare(id, name, expire) {
   _cancelShareMode = 'single';
   _cancelShareIds = [id];
   if (!needCancelConfirm(expire)) {
-    // 无需确认，直接执行
-    closeModal('cancelShareModal');
-    // TODO: 调用网盘API取消分享，成功后再删除本地记录
-    toast('取消分享功能即将上线', 'warning');
+    // 无需确认，直接执行取消
+    _cancelShareIds = [id];
+    // 直接调用取消API
+    try {
+      const result = await api('POST', '/api/shares/cancel', { ids: [id], sync: true });
+      if (result.success) {
+        let msg = result.message || '取消分享完成';
+        toast(msg, result.no_share_id > 0 || result.no_cookie > 0 || result.failed > 0 ? 'warning' : 'success');
+      } else {
+        toast(result.message || '取消分享失败', 'warning');
+      }
+    } catch(e) {
+      toast('取消分享失败: ' + (e.message || e), 'error');
+    }
+    _cancelShareIds = [];
+    _cancelShareMode = '';
+    loadShares();
+    loadStats();
     return;
   }
   const expireTag = expire === '已失效' ? '<span style="color:var(--gray-400);">（已失效）</span>'
     : expire ? `<span style="color:var(--gray-400);">（${escHtml(expire)}）</span>` : '';
   document.getElementById('cancelShareInfo').innerHTML =
-    `即将取消分享：<strong style="color:var(--text-primary);">${escHtml(name)}</strong>${expireTag}<br>此操作不可撤销，取消后该分享链接将失效。`;
+    `即将取消分享：<strong style="color:var(--text-primary);">${escHtml(name)}</strong>${expireTag}<br>取消后网盘端分享将失效，本地记录将删除。`;
   document.getElementById('cancelShareInput').value = '';
   document.getElementById('cancelShareConfirmBtn').disabled = true;
   document.getElementById('cancelShareConfirmBtn').style.opacity = '.5';
@@ -2373,14 +2387,29 @@ async function batchCancelShare() {
   _cancelShareIds = [...state.selected];
   const cfg = getCancelConfirmConfig();
   if (!cfg.enabled) {
-    // 无需确认，直接执行
-    // TODO: 调用网盘API取消分享，成功后再删除本地记录
-    toast(`取消分享功能即将上线（已选 ${_cancelShareIds.length} 条）`, 'warning');
+    // 无需确认，直接执行批量取消
+    try {
+      const result = await api('POST', '/api/shares/cancel', { ids: _cancelShareIds, sync: true });
+      if (result.success) {
+        let msg = result.message || '批量取消分享完成';
+        toast(msg, result.no_share_id > 0 || result.no_cookie > 0 || result.failed > 0 ? 'warning' : 'success');
+      } else {
+        toast(result.message || '批量取消分享失败', 'warning');
+      }
+    } catch(e) {
+      toast('批量取消分享失败: ' + (e.message || e), 'error');
+    }
+    _cancelShareIds = [];
+    _cancelShareMode = '';
+    state.selected.clear();
+    updateBatchUI();
+    loadShares();
+    loadStats();
     return;
   }
   // 批量操作始终需要确认
   document.getElementById('cancelShareInfo').innerHTML =
-    `即将批量取消 <strong style="color:var(--text-primary);">${_cancelShareIds.length}</strong> 条分享。<br>此操作不可撤销，取消后这些分享链接将失效。`;
+    `即将批量取消 <strong style="color:var(--text-primary);">${_cancelShareIds.length}</strong> 条分享。<br>取消后网盘端分享将失效，本地记录将删除。`;
   document.getElementById('cancelShareInput').value = '';
   document.getElementById('cancelShareConfirmBtn').disabled = true;
   document.getElementById('cancelShareConfirmBtn').style.opacity = '.5';
@@ -2400,8 +2429,28 @@ async function confirmCancelShare() {
   const input = document.getElementById('cancelShareInput').value.trim();
   if (input !== '确认取消分享') return;
   closeModal('cancelShareModal');
-  // TODO: 调用网盘API取消分享，成功后再删除本地记录
-  toast('取消分享功能即将上线', 'warning');
+
+  // 调用后端取消分享API
+  try {
+    const result = await api('POST', '/api/shares/cancel', { ids: _cancelShareIds, sync: true });
+    
+    if (result.success) {
+      let msg = result.message || '取消分享完成';
+      toast(msg, result.no_share_id > 0 || result.no_cookie > 0 || result.failed > 0 ? 'warning' : 'success');
+    } else {
+      toast(result.message || '取消分享失败', 'error');
+    }
+  } catch(e) {
+    toast('取消分享请求失败: ' + (e.message || e), 'error');
+  }
+
+  // 清理状态
+  _cancelShareIds = [];
+  _cancelShareMode = '';
+  state.selected.clear();
+  updateBatchUI();
+  loadShares();
+  loadStats();
 }
 
 // ── Select ────────────────────────────────────────────────

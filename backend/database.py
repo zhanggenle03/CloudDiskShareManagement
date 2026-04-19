@@ -120,6 +120,26 @@ def init_db():
         conn.commit()
         log.info('数据库迁移：shares 表添加 account_name 字段')
 
+    # 数据库迁移：给 shares 表添加 share_id 字段（网盘端分享ID，用于取消分享等操作）
+    try:
+        c = conn.cursor()
+        c.execute("SELECT share_id FROM shares LIMIT 0")
+    except Exception:
+        c = conn.cursor()
+        c.execute("ALTER TABLE shares ADD COLUMN share_id TEXT DEFAULT ''")
+        conn.commit()
+        log.info('数据库迁移：shares 表添加 share_id 字段')
+
+    # 数据库迁移：给 shares 表添加 account_id 字段（关联账号ID，用于取消分享时查找Cookie）
+    try:
+        c = conn.cursor()
+        c.execute("SELECT account_id FROM shares LIMIT 0")
+    except Exception:
+        c = conn.cursor()
+        c.execute("ALTER TABLE shares ADD COLUMN account_id INTEGER DEFAULT 0")
+        conn.commit()
+        log.info('数据库迁移：shares 表添加 account_id 字段')
+
     conn.close()
     log.info('数据库初始化完成')
     
@@ -142,7 +162,7 @@ def upsert_share(share: dict) -> dict:
     conn = get_conn()
     c = conn.cursor()
     # 检查是否已存在（包括被软删除的）
-    c.execute("SELECT id, pwd, is_deleted, account_name FROM shares WHERE url = ?", (share['url'],))
+    c.execute("SELECT id, pwd, is_deleted, account_name, share_id, account_id FROM shares WHERE url = ?", (share['url'],))
     row = c.fetchone()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -151,18 +171,23 @@ def upsert_share(share: dict) -> dict:
     if new_account_name:
         new_account_name = new_account_name[:7]
 
+    # 提取 share_id（网盘端分享ID）和 account_id（关联账号ID）
+    new_share_id = share.get('share_id', '')
+    new_account_id = share.get('account_id', 0) or 0
+
     if row:
         # 如果记录被软删除，视为"新增"（重新激活）
         if row['is_deleted'] == 1:
             log.debug(f'重新激活已删除的分享: {share.get("name")[:30]}..., url={share.get("url")[:50]}...')
             c.execute("""
                 UPDATE shares SET source=?, name=?, pwd=?, share_time=?, expire=?,
-                    parent_dir=?, view_count=?, account_name=?, is_deleted=0, updated_at=?
+                    parent_dir=?, view_count=?, account_name=?, share_id=?, account_id=?,
+                    is_deleted=0, updated_at=?
                 WHERE url=?
             """, (
                 share.get('source'), share.get('name'), share.get('pwd'),
                 share.get('share_time'), share.get('expire'), share.get('parent_dir'),
-                share.get('view_count', -1), new_account_name, now, share['url']
+                share.get('view_count', -1), new_account_name, new_share_id, new_account_id, now, share['url']
             ))
             conn.commit()
             conn.close()
@@ -184,14 +209,23 @@ def upsert_share(share: dict) -> dict:
         existing_account_name = row['account_name'] or ''
         final_account_name = new_account_name if new_account_name else existing_account_name
 
+        # share_id 智能合并：新数据有值则用新值，否则保留已有值
+        existing_share_id = row['share_id'] or ''
+        final_share_id = new_share_id if new_share_id else existing_share_id
+
+        # account_id 智能合并：新数据有值则用新值，否则保留已有值
+        existing_account_id = row['account_id'] or 0
+        final_account_id = new_account_id if new_account_id else existing_account_id
+
         c.execute("""
             UPDATE shares SET name=?, pwd=?, share_time=?, expire=?,
-                parent_dir=?, view_count=?, account_name=?, is_deleted=0, updated_at=?
+                parent_dir=?, view_count=?, account_name=?, share_id=?, account_id=?,
+                is_deleted=0, updated_at=?
             WHERE url=?
         """, (
             share.get('name'), final_pwd, share.get('share_time'),
             share.get('expire'), share.get('parent_dir'), share.get('view_count', -1),
-            final_account_name, now, share['url']
+            final_account_name, final_share_id, final_account_id, now, share['url']
         ))
         conn.commit()
         conn.close()
@@ -200,12 +234,12 @@ def upsert_share(share: dict) -> dict:
     else:
         log.debug(f'插入分享: {share.get("name")[:30]}..., url={share.get("url")[:50]}...')
         c.execute("""
-            INSERT INTO shares (source, name, url, pwd, share_time, expire, parent_dir, view_count, account_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO shares (source, name, url, pwd, share_time, expire, parent_dir, view_count, account_name, share_id, account_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             share.get('source'), share.get('name'), share.get('url'),
             share.get('pwd'), share.get('share_time'), share.get('expire'),
-            share.get('parent_dir'), share.get('view_count', -1), new_account_name
+            share.get('parent_dir'), share.get('view_count', -1), new_account_name, new_share_id, new_account_id
         ))
         conn.commit()
         new_id = c.lastrowid
@@ -265,7 +299,7 @@ def get_shares(source=None, expire_filter=None, keyword=None, tag=None,
 
 
 def update_share(share_id: int, fields: dict):
-    allowed = {'name', 'pwd', 'expire', 'tags', 'notes', 'is_deleted', 'account_name'}
+    allowed = {'name', 'pwd', 'expire', 'tags', 'notes', 'is_deleted', 'account_name', 'share_id', 'account_id'}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False
