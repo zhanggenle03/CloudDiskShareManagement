@@ -41,7 +41,53 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller CloudDiskShareManagement.spec --clean
+          pyinstaller --name "CloudDiskShareManagement" `
+            --onedir `
+            --console `
+            --icon=app.ico `
+            --add-data "frontend;frontend" `
+            --add-data "backend;backend" `
+            --collect-all flask `
+            --collect-all werkzeug `
+            --collect-all jinja2 `
+            --collect-all markupsafe `
+            --collect-all itsdangerous `
+            --collect-all click `
+            --collect-all blinker `
+            --collect-all certifi `
+            --collect-all charset_normalizer `
+            --collect-all idna `
+            --collect-all urllib3 `
+            --collect-all requests `
+            --collect-all chardet `
+            --collect-all flask_cors `
+            --hidden-import flask `
+            --hidden-import flask_cors `
+            --hidden-import chardet `
+            --hidden-import sqlite3 `
+            --hidden-import sqlite3.dbapi2 `
+            --hidden-import certifi `
+            --hidden-import charset_normalizer `
+            --hidden-import idna `
+            --hidden-import urllib3 `
+            --hidden-import requests `
+            --hidden-import werkzeug `
+            --hidden-import jinja2 `
+            --hidden-import markupsafe `
+            --hidden-import itsdangerous `
+            --hidden-import click `
+            --hidden-import blinker `
+            --hidden-import logging `
+            --hidden-import logging.handlers `
+            --hidden-import datetime `
+            --hidden-import json `
+            --hidden-import signal `
+            --hidden-import subprocess `
+            --hidden-import threading `
+            --hidden-import traceback `
+            --hidden-import csv `
+            --hidden-import webbrowser `
+            main.py
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
