@@ -7,33 +7,7 @@ import sys
 import signal
 import subprocess
 import time
-
-# ── 路径配置（支持 PyInstaller 打包）──────────────────────
-def _get_paths():
-    """获取路径配置"""
-    if getattr(sys, 'frozen', False):
-        # PyInstaller 打包后的环境
-        return {
-            'BASE_DIR': os.path.dirname(sys.executable),
-            'BACKEND_DIR': os.path.join(sys._MEIPASS, 'backend'),
-            'PID_FILE': os.path.join(os.path.dirname(sys.executable), 'app.pid'),
-            'IS_FROZEN': True
-        }
-    else:
-        # 普通开发环境
-        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return {
-            'BASE_DIR': base,
-            'BACKEND_DIR': os.path.join(base, 'backend'),
-            'PID_FILE': os.path.join(base, 'app.pid'),
-            'IS_FROZEN': False
-        }
-
-_PATHS = _get_paths()
-BASE_DIR = _PATHS['BASE_DIR']
-BACKEND_DIR = _PATHS['BACKEND_DIR']
-PID_FILE = _PATHS['PID_FILE']
-IS_FROZEN = _PATHS['IS_FROZEN']
+from paths import BASE_DIR, BACKEND_DIR, PID_FILE, FROZEN
 
 
 def get_logger():
@@ -275,7 +249,7 @@ def _do_restart():
     try:
         creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
         
-        if IS_FROZEN:
+        if FROZEN:
             # 打包环境：重启 exe 本身
             exe_path = sys.executable
             new_process = subprocess.Popen(

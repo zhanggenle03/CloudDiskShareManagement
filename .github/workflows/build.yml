@@ -31,8 +31,6 @@ jobs:
         run: |
           python -c "
           from PIL import Image
-          import os
-
           img = Image.open('frontend/app-icon.jpg')
           if img.mode != 'RGBA':
               img = img.convert('RGBA')
@@ -40,10 +38,6 @@ jobs:
           img.save('app.ico', format='ICO', sizes=sizes)
           print('Icon created: app.ico')
           "
-
-      - name: Create data directory
-        run: |
-          if (!(Test-Path "data\logs")) { New-Item -ItemType Directory -Path "data\logs" -Force }
 
       - name: Build with PyInstaller
         run: |
@@ -73,22 +67,22 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Download artifact
+      - name: Download ZIP artifact
         uses: actions/download-artifact@v4
         with:
-          name: CloudDiskShareManagement-Windows
+          name: CloudDiskShareManagement-Windows-Zip
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: CloudDiskShareManagement-Windows.zip
+          files: CloudDiskShareManagement.zip
           body: |
             ## CloudDiskShareManagement
 
             Windows portable executable (no installation required).
 
             ### Usage
-            1. Extract the ZIP file
+            1. Download and extract the ZIP file
             2. Run `CloudDiskShareManagement.exe`
 
             ### Requirements
