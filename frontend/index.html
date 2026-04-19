@@ -249,10 +249,10 @@
          align-items: center; gap: 6px; }
   .btn-primary { background: var(--primary); color: #fff; }
   .btn-primary:hover { background: #3B56D9; }
-  .btn-danger { background: var(--danger); color: #fff; }
-  .btn-danger:hover { background: #DC2626; }
-  .btn-warning { background: var(--warning); color: #fff; }
-  .btn-warning:hover { background: #D97706; }
+  .btn-danger { background: rgba(239,68,68,.12); color: var(--danger); }
+  .btn-danger:hover { background: rgba(239,68,68,.22); }
+  .btn-cancel { background: var(--danger); color: #fff; }
+  .btn-cancel:hover { background: #DC2626; }
   .btn-ghost { background: var(--gray-100); color: var(--gray-600); }
   .btn-ghost:hover { background: var(--gray-200); }
 
@@ -355,7 +355,7 @@
                 text-align: center; transition: all .15s; }
   .action-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
   .action-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,.1); }
-  .action-btn.warning:hover { border-color: var(--warning); color: var(--warning); background: rgba(245,158,11,.1); }
+  .action-btn.cancel:hover { border-color: #DC2626; color: #fff; background: var(--danger); }
 
   /* Parent dir info */
   .parent-dir { font-size: 11px; color: var(--gray-400); display: flex; align-items: center; gap: 3px; }
@@ -428,8 +428,8 @@
   .row-dropdown-item:hover { background: var(--gray-50); }
   .row-dropdown-item.danger { color: var(--danger); }
   .row-dropdown-item.danger:hover { background: rgba(239,68,68,.06); }
-  .row-dropdown-item.warning { color: var(--warning); }
-  .row-dropdown-item.warning:hover { background: rgba(245,158,11,.06); }
+  .row-dropdown-item.cancel { color: #DC2626; font-weight: 500; }
+  .row-dropdown-item.cancel:hover { background: rgba(239,68,68,.08); }
 
   /* ── Pagination ── */
   .pagination { display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -457,6 +457,39 @@
   .form-group input:focus, .form-group textarea:focus { border-color: var(--primary); }
   .form-group textarea { min-height: 80px; resize: vertical; }
   .modal-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 8px; flex-shrink: 0; }
+
+  /* ── Toggle Switch ── */
+  .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: var(--gray-300); border-radius: 24px; transition: .2s; }
+  .toggle-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px;
+                           background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+  .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
+
+  /* ── Segmented Slider (Cancel Confirm Level) ── */
+  .seg-slider { position: relative; display: flex; background: var(--gray-100); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg-slider[data-level="expired"] .seg-fill,
+  .seg-slider[data-level="limited"] .seg-fill,
+  .seg-slider[data-level="permanent"] .seg-fill,
+  .seg-slider[data-level="none"] .seg-fill {
+    position: absolute; top: 3px; left: 3px; height: calc(100% - 6px);
+    background: var(--primary); border-radius: 8px;
+    transition: width .25s cubic-bezier(.4,0,.2,1);
+    z-index: 0;
+  }
+  .seg-slider[data-level="none"]   .seg-fill { width: calc(100% - 6px); opacity: .15; }
+  .seg-slider[data-level="permanent"] .seg-fill { width: calc(33.333% - 2px); }
+  .seg-slider[data-level="limited"]  .seg-fill { width: calc(66.666% - 1px); }
+  .seg-slider[data-level="expired"]  .seg-fill { width: calc(100% - 6px); }
+  .seg-slider .seg-btn {
+    position: relative; z-index: 1; flex: 1; border: none; background: none;
+    padding: 8px 0; font-size: 12px; font-weight: 600; color: var(--gray-400);
+    cursor: pointer; border-radius: 8px; transition: color .2s; text-align: center;
+    line-height: 1.3;
+  }
+  .seg-slider .seg-btn.active { color: #fff; }
+  .seg-slider .seg-btn small { display: block; font-size: 10px; font-weight: 400; opacity: .7; margin-top: 1px; }
 
   /* ── Toast ── */
   .toast-container { position: fixed; top: 20px; right: 20px; z-index: 999;
@@ -617,6 +650,9 @@
           ⚙️
         </button>
         <div class="dropdown-menu" id="settingsMenu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:6px;min-width:120px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:100;">
+          <div class="dropdown-item" onclick="showGeneralSettingsModal(); closeSettingsMenu();">
+            ⚙️ 通用
+          </div>
           <div class="dropdown-item" onclick="showAboutModal(); closeSettingsMenu();">
             ℹ️ 关于
           </div>
@@ -648,8 +684,8 @@
           <button class="btn btn-primary" id="addResourceBtn" onclick="showAddResourceModal()" style="display:none;padding:6px 14px;font-size:13px;">+ 新建资源</button>
           <div id="batchActions" style="display:none;gap:10px;align-items:center;margin-left:12px;">
             <button class="btn btn-primary" onclick="showBatchTagModal()" style="padding:6px 14px;font-size:13px;">🏷️ 批量添加标签</button>
-            <button class="btn btn-warning" id="batchCancelShareBtn" onclick="batchCancelShare()" style="padding:6px 14px;font-size:13px;">🚫 取消分享</button>
             <button class="btn btn-danger" onclick="batchDeleteSelected()" style="padding:6px 14px;font-size:13px;">🗑 删除选中</button>
+            <button class="btn btn-cancel" id="batchCancelShareBtn" onclick="batchCancelShare()" style="padding:6px 14px;font-size:13px;">🚫 取消分享</button>
           </div>
           <div id="batchResourceActions" style="display:none;gap:10px;align-items:center;margin-left:12px;">
             <button class="btn btn-danger" onclick="batchDeleteSelectedResources()" style="padding:6px 14px;font-size:13px;">🗑 删除选中资源</button>
@@ -1041,6 +1077,19 @@
 }
 </style>
 
+<!-- General Settings Modal -->
+<div class="modal-overlay" id="generalSettingsModal">
+  <div class="modal" style="width:480px;">
+    <h3>⚙️ 通用设置</h3>
+    <div id="generalSettingsContent" style="font-size:13px;color:var(--gray-600);">
+      <!-- 设置项将由 JS 动态渲染 -->
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal('generalSettingsModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
 <!-- About Modal -->
 <div class="modal-overlay" id="aboutModal">
   <div class="modal" style="width:400px;text-align:center;padding:32px;">
@@ -1281,6 +1330,22 @@
       </div>
       <button class="btn btn-ghost" onclick="closeSharePickerModal()">← 返回</button>
       <button class="btn btn-primary" onclick="confirmShareSelection()">确定选择</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cancel Share Confirm Modal -->
+<div class="modal-overlay" id="cancelShareModal">
+  <div class="modal" style="width:400px;">
+    <h3>🚫 取消分享确认</h3>
+    <p id="cancelShareInfo" style="font-size:13px;color:var(--gray-600);margin-bottom:14px;line-height:1.6;"></p>
+    <div class="form-group">
+      <label>请输入 <code style="background:var(--gray-100);padding:2px 6px;border-radius:4px;font-size:13px;color:var(--danger);">确认取消分享</code> 以继续</label>
+      <input type="text" id="cancelShareInput" placeholder="确认取消分享" autocomplete="off" oninput="onCancelShareInputChange()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('cancelShareModal')">返回</button>
+      <button class="btn btn-cancel" id="cancelShareConfirmBtn" onclick="confirmCancelShare()" disabled style="opacity:.5;">🚫 确认取消</button>
     </div>
   </div>
 </div>
@@ -1568,8 +1633,8 @@ function renderCard(item) {
     <div class="card-actions">
       <button class="action-btn" onclick="openEditModal(${item.id})">✏️ 编辑</button>
       <button class="action-btn" onclick="copyShare('${escHtml(item.name)}','${item.url}','${item.pwd||''}')">🔗 分享复制</button>
-      <button class="action-btn warning" onclick="cancelShare(${item.id}, '${escHtml(item.name)}')">🚫 取消分享</button>
       <button class="action-btn danger" onclick="softDelete(${item.id})">🗑 删除</button>
+      <button class="action-btn cancel" onclick="cancelShare(${item.id}, '${escHtml(item.name)}', '${escHtml(item.expire || '')}')">🚫 取消分享</button>
     </div>
   </div>`;
 }
@@ -1635,8 +1700,8 @@ function renderTableRow(item) {
       <div class="row-dropdown" id="menu-${item.id}">
         <div class="row-dropdown-item" onclick="openEditModal(${item.id}); closeRowMenu(this)">✏️ 编辑</div>
         <div class="row-dropdown-item" onclick="copyShare('${escHtml(item.name)}','${item.url}','${item.pwd||''}',this); closeRowMenu(this)">🔗 分享复制</div>
-        <div class="row-dropdown-item warning" onclick="cancelShare(${item.id}, '${escHtml(item.name)}'); closeRowMenu(this)">🚫 取消分享</div>
         <div class="row-dropdown-item danger" onclick="softDelete(${item.id}); closeRowMenu(this)">🗑 删除</div>
+        <div class="row-dropdown-item cancel" onclick="cancelShare(${item.id}, '${escHtml(item.name)}', '${escHtml(item.expire || '')}'); closeRowMenu(this)">🚫 取消分享</div>
       </div>
     </td>
   </tr>`;
@@ -2241,15 +2306,102 @@ async function softDelete(id) {
 }
 
 // ── Cancel Share ──────────────────────────────────────────
-// TODO: 后续实现调用网盘API取消分享的逻辑
-async function cancelShare(id, name) {
-  toast('取消分享功能即将上线', 'warning');
+// TODO: confirmCancelShare 中实现调用网盘API取消分享的逻辑
+let _cancelShareMode = ''; // 'single' | 'batch'
+let _cancelShareIds = [];
+
+// 获取取消分享确认设置
+function getCancelConfirmConfig() {
+  const s = _settingsCache || {};
+  const raw = s.cancelShareConfirm;
+  if (raw) {
+    try {
+      const cfg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (cfg.level !== undefined) return cfg;
+      // 兼容旧格式
+      if (!cfg.enabled) return { enabled: false, level: 'none' };
+      if (cfg.expired) return { enabled: true, level: 'expired' };
+      if (cfg.limited !== false) return { enabled: true, level: 'limited' };
+      if (cfg.permanent !== false) return { enabled: true, level: 'permanent' };
+      return { enabled: false, level: 'none' };
+    } catch(e) {}
+  }
+  return { enabled: true, level: 'limited' };
 }
 
-// TODO: 后续实现批量调用网盘API取消分享的逻辑
+// 判断某个 expire 类型是否需要确认
+function needCancelConfirm(expire) {
+  const cfg = getCancelConfirmConfig();
+  if (!cfg.enabled || cfg.level === 'none') return false;
+  const level = cfg.level;
+  if (level === 'expired') return true; // 全部需确认
+  if (level === 'limited') {
+    // 永久 + 限时需确认，已失效不需要
+    return expire !== '已失效';
+  }
+  if (level === 'permanent') {
+    // 仅永久需确认
+    return expire === '永久有效';
+  }
+  return false;
+}
+
+async function cancelShare(id, name, expire) {
+  _cancelShareMode = 'single';
+  _cancelShareIds = [id];
+  if (!needCancelConfirm(expire)) {
+    // 无需确认，直接执行
+    closeModal('cancelShareModal');
+    // TODO: 调用网盘API取消分享，成功后再删除本地记录
+    toast('取消分享功能即将上线', 'warning');
+    return;
+  }
+  const expireTag = expire === '已失效' ? '<span style="color:var(--gray-400);">（已失效）</span>'
+    : expire ? `<span style="color:var(--gray-400);">（${escHtml(expire)}）</span>` : '';
+  document.getElementById('cancelShareInfo').innerHTML =
+    `即将取消分享：<strong style="color:var(--text-primary);">${escHtml(name)}</strong>${expireTag}<br>此操作不可撤销，取消后该分享链接将失效。`;
+  document.getElementById('cancelShareInput').value = '';
+  document.getElementById('cancelShareConfirmBtn').disabled = true;
+  document.getElementById('cancelShareConfirmBtn').style.opacity = '.5';
+  document.getElementById('cancelShareModal').classList.add('show');
+  setTimeout(() => document.getElementById('cancelShareInput').focus(), 100);
+}
+
 async function batchCancelShare() {
   if (state.selected.size === 0) return;
-  toast(`取消分享功能即将上线（已选 ${state.selected.size} 条）`, 'warning');
+  _cancelShareMode = 'batch';
+  _cancelShareIds = [...state.selected];
+  const cfg = getCancelConfirmConfig();
+  if (!cfg.enabled) {
+    // 无需确认，直接执行
+    // TODO: 调用网盘API取消分享，成功后再删除本地记录
+    toast(`取消分享功能即将上线（已选 ${_cancelShareIds.length} 条）`, 'warning');
+    return;
+  }
+  // 批量操作始终需要确认
+  document.getElementById('cancelShareInfo').innerHTML =
+    `即将批量取消 <strong style="color:var(--text-primary);">${_cancelShareIds.length}</strong> 条分享。<br>此操作不可撤销，取消后这些分享链接将失效。`;
+  document.getElementById('cancelShareInput').value = '';
+  document.getElementById('cancelShareConfirmBtn').disabled = true;
+  document.getElementById('cancelShareConfirmBtn').style.opacity = '.5';
+  document.getElementById('cancelShareModal').classList.add('show');
+  setTimeout(() => document.getElementById('cancelShareInput').focus(), 100);
+}
+
+function onCancelShareInputChange() {
+  const input = document.getElementById('cancelShareInput').value.trim();
+  const btn = document.getElementById('cancelShareConfirmBtn');
+  const matched = input === '确认取消分享';
+  btn.disabled = !matched;
+  btn.style.opacity = matched ? '1' : '.5';
+}
+
+async function confirmCancelShare() {
+  const input = document.getElementById('cancelShareInput').value.trim();
+  if (input !== '确认取消分享') return;
+  closeModal('cancelShareModal');
+  // TODO: 调用网盘API取消分享，成功后再删除本地记录
+  toast('取消分享功能即将上线', 'warning');
 }
 
 // ── Select ────────────────────────────────────────────────
@@ -2292,8 +2444,8 @@ function updateBatchUI() {
   const batchEl = document.getElementById('batchActions');
   batchEl.style.display = count > 0 ? 'flex' : 'none';
   if (count > 0) {
+    batchEl.querySelector('button:nth-child(2)').textContent = `🗑 删除 (${count})`;
     document.getElementById('batchCancelShareBtn').textContent = `🚫 取消分享 (${count})`;
-    batchEl.querySelector('button:last-child').textContent = `🗑 删除 (${count})`;
   }
 }
 
@@ -2823,6 +2975,101 @@ function closeSettingsMenu() {
 
 function showAboutModal() {
   document.getElementById('aboutModal').classList.add('show');
+}
+
+async function showGeneralSettingsModal() {
+  const container = document.getElementById('generalSettingsContent');
+  const s = await loadSettings();
+  let cfg = { enabled: true, level: 'limited' };
+  const raw = s.cancelShareConfirm;
+  if (raw) {
+    try { cfg = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch(e) {}
+  }
+
+  // 兼容旧格式（三个 checkbox）：映射为 level
+  if (cfg.level === undefined) {
+    if (!cfg.enabled) cfg.level = 'none';
+    else if (cfg.expired) cfg.level = 'expired';
+    else if (cfg.limited !== false) cfg.level = 'limited';
+    else if (cfg.permanent !== false) cfg.level = 'permanent';
+    else cfg.level = 'none';
+  }
+  const enabled = cfg.level !== 'none';
+  const level = cfg.level || 'limited';
+
+  container.innerHTML = `
+    <div style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text);">🚫 取消分享确认</div>
+          <div style="font-size:12px;color:var(--gray-400);margin-top:2px;">关闭后取消分享将直接执行，不再弹出确认框</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="cancelConfirmEnabled" ${enabled ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div id="cancelConfirmOptions" style="${enabled ? '' : 'opacity:.4;pointer-events:none;'}">
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:10px;">确认范围：向右滑动可扩大需确认的类型</div>
+        <div class="seg-slider" id="segSlider" data-level="${enabled ? level : 'none'}">
+          <div class="seg-fill"></div>
+          <button class="seg-btn ${level === 'permanent' ? 'active' : ''}" data-val="permanent" onclick="setSegLevel('permanent')">永久<small>仅永久</small></button>
+          <button class="seg-btn ${level === 'limited' ? 'active' : ''}" data-val="limited" onclick="setSegLevel('limited')">限时<small>永久+限时</small></button>
+          <button class="seg-btn ${level === 'expired' ? 'active' : ''}" data-val="expired" onclick="setSegLevel('expired')">已失效<small>全部类型</small></button>
+        </div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:8px;text-align:center;" id="segHint">
+          ${level === 'permanent' ? '当前：仅永久有效分享需确认' : level === 'limited' ? '当前：永久 + 限时分享需确认' : level === 'expired' ? '当前：所有类型分享均需确认' : '当前：已关闭确认'}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 绑定总开关
+  const enabledCb = container.querySelector('#cancelConfirmEnabled');
+  const optionsDiv = container.querySelector('#cancelConfirmOptions');
+  const slider = container.querySelector('#segSlider');
+  enabledCb.addEventListener('change', async function() {
+    const on = this.checked;
+    optionsDiv.style.opacity = on ? '1' : '.4';
+    optionsDiv.style.pointerEvents = on ? 'auto' : 'none';
+    if (on) {
+      // 开启时默认设为 limited
+      setSegLevel('limited');
+    } else {
+      slider.setAttribute('data-level', 'none');
+      slider.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+      await saveCancelConfirmSetting();
+    }
+  });
+
+  document.getElementById('generalSettingsModal').classList.add('show');
+}
+
+function setSegLevel(level) {
+  const slider = document.getElementById('segSlider');
+  if (!slider) return;
+  slider.setAttribute('data-level', level);
+  slider.querySelectorAll('.seg-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.val === level);
+  });
+  const hints = {
+    permanent: '当前：仅永久有效分享需确认',
+    limited:   '当前：永久 + 限时分享需确认',
+    expired:   '当前：所有类型分享均需确认'
+  };
+  const hint = document.getElementById('segHint');
+  if (hint) hint.textContent = hints[level] || '';
+  saveCancelConfirmSetting();
+}
+
+async function saveCancelConfirmSetting() {
+  const enabled = document.getElementById('cancelConfirmEnabled').checked;
+  const levelEl = document.getElementById('segSlider');
+  const level = enabled ? (levelEl ? levelEl.getAttribute('data-level') : 'limited') : 'none';
+  const val = JSON.stringify({ enabled, level });
+  await saveSetting('cancelShareConfirm', val);
+  _settingsCache.cancelShareConfirm = val;
+  toast('设置已保存', 'success');
 }
 
 // 点击其他地方关闭菜单
