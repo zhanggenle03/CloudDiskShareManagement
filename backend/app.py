@@ -7,7 +7,18 @@ import traceback
 import time
 import json
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# ── 设置路径（支持 PyInstaller 打包）─────────────────────
+if getattr(sys, 'frozen', False):
+    BUNDLE_DIR = sys._MEIPASS
+    BACKEND_DIR = os.path.join(BUNDLE_DIR, 'backend')
+else:
+    BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+    BUNDLE_DIR = os.path.dirname(BACKEND_DIR)
+
+sys.path.insert(0, BACKEND_DIR)
+
+# ── 导入路径配置 ─────────────────────────────────────────
+from paths import BASE_DIR, DATA_DIR, FRONTEND_DIR
 
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -25,9 +36,6 @@ from database import (
 from parser import auto_detect_and_parse
 from sync_manager import get_sync_manager
 from process_manager import on_startup, on_shutdown, graceful_shutdown, restart_service, remove_pid, terminate_process, shutdown_service
-
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FRONTEND_DIR = os.path.join(BASE_DIR, 'frontend')
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='')
 CORS(app)

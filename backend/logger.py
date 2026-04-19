@@ -5,11 +5,11 @@
 """
 import logging
 import os
+import sys
 from logging.handlers import RotatingFileHandler
+from paths import LOG_DIR
 
-# ── 日志目录 ──
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOG_DIR = os.path.join(BASE_DIR, 'data', 'logs')
+# ── 日志文件路径 ──
 LOG_FILE = os.path.join(LOG_DIR, 'app.log')
 
 # ── 日志大小配置 ──
@@ -41,11 +41,12 @@ def setup_logger(name='app', level=logging.INFO):
     logger.setLevel(level)
     formatter = logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
 
-    # ── 控制台输出 ──
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(level)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    # ── 控制台输出（打包时禁用） ──
+    if not getattr(sys, 'frozen', False):
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(level)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
 
     # ── 文件输出（带轮转） ──
     os.makedirs(LOG_DIR, exist_ok=True)

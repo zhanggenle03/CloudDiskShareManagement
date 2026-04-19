@@ -1,0 +1,124 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller pillow
+          pip install -r requirements.txt
+
+      - name: Convert image to ICO
+        run: |
+          python -c "
+          from PIL import Image
+          import os
+          
+          img = Image.open('frontend/app-icon.jpg')
+          # Convert to RGBA if needed
+          if img.mode != 'RGBA':
+              img = img.convert('RGBA')
+          
+          # Resize to 256x256 for ICO
+          sizes = [(16,16), (32,32), (48,48), (64,64), (128,128), (256,256)]
+          img.save('app.ico', format='ICO', sizes=sizes)
+          print('Icon created: app.ico')
+          "
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --name "CloudDiskShareManagement" ^
+            --onedir ^
+            --windowed ^
+            --icon=app.ico ^
+            --add-data "frontend;frontend" ^
+            --add-data "data;data" ^
+            --add-data "backend;backend" ^
+            --hidden-import flask ^
+            --hidden-import flask_cors ^
+            --hidden-import chardet ^
+            --collect-all flask ^
+            --collect-all werkzeug ^
+            --runtime-tmpdir "." ^
+            main.py
+
+      - name: Copy additional files
+        run: |
+          # Copy requirements to output for reference
+          copy requirements.txt dist\CloudDiskShareManagement\
+          # Create a README for the exe
+          (
+            echo CloudDiskShareManagement
+            echo ====================
+            echo.
+            echo Usage:
+            echo   Double-click CloudDiskShareManagement.exe to start
+            echo.
+            echo This application requires no additional dependencies.
+            echo.
+            echo Built with GitHub Actions
+          ) > dist\CloudDiskShareManagement\README.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudDiskShareManagement-Windows
+          path: dist/CloudDiskShareManagement/
+          retention-days: 30
+
+      - name: Upload ZIP package
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudDiskShareManagement-Windows-Zip
+          path: dist/CloudDiskShareManagement.zip
+          retention-days: 30
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CloudDiskShareManagement-Windows
+
+      - name: Create ZIP
+        run: |
+          powershell -Command "Compress-Archive -Path 'CloudDiskShareManagement/*' -DestinationPath 'CloudDiskShareManagement.zip'"
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: CloudDiskShareManagement.zip
+          body: |
+            ## CloudDiskShareManagement
+            
+            Windows portable executable (no installation required).
+            
+            ### Usage
+            1. Extract the ZIP file
+            2. Run `CloudDiskShareManagement.exe`
+            
+            ### Requirements
+            - Windows 10 or later
+            - No additional dependencies needed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

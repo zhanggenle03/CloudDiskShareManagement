@@ -154,3 +154,37 @@ A: 查看日志和错误信息：
 - 应用日志：`data/logs/app.log`
 - 启动说明：`启动流程说明.md`
 - 手动启动：命令行运行 `python backend/app.py` 查看实时输出
+
+## 自动构建 (CI/CD)
+
+### GitHub Actions 自动打包
+
+每次推送到 `main` 分支时，会自动构建 Windows 可执行文件：
+
+1. **触发条件**：`push` 或 `pull_request` 到 `main`/`master` 分支
+2. **构建产物**：
+   - `CloudDiskShareManagement-Windows/` — 解压版（目录）
+   - `CloudDiskShareManagement-Windows-Zip/` — 压缩包
+3. **下载位置**：GitHub Actions 构建页面或 Release 页面
+
+### 构建产物说明
+
+构建完成后会生成：
+- `CloudDiskShareManagement.exe` — 主程序（双击运行）
+- `frontend/` — 前端资源
+- `data/` — 数据目录（首次运行自动创建）
+- `README.txt` — 使用说明
+
+### 使用打包版本
+
+1. 下载并解压 ZIP 文件
+2. 双击 `CloudDiskShareManagement.exe`
+3. 无需安装 Python 或任何依赖
+
+### 创建 Release
+
+当推送带 `v*.*.*` 标签时，会自动创建 GitHub Release：
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```

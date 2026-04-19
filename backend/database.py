@@ -4,11 +4,10 @@
 import sqlite3
 import os
 from datetime import datetime
+from paths import DB_PATH
 from logger import setup_logger
 
 log = setup_logger('database')
-
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'shares.db')
 
 
 def get_conn():

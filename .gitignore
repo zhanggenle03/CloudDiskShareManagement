@@ -44,3 +44,7 @@ Desktop.ini
 # Environment
 .env
 .env.local
+
+# Build artifacts
+app.ico
+*.spec

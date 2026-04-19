@@ -8,10 +8,32 @@ import signal
 import subprocess
 import time
 
-# ── 路径配置 ──────────────────────────────────────────────
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BACKEND_DIR = os.path.join(BASE_DIR, 'backend')
-PID_FILE = os.path.join(BASE_DIR, 'app.pid')
+# ── 路径配置（支持 PyInstaller 打包）──────────────────────
+def _get_paths():
+    """获取路径配置"""
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包后的环境
+        return {
+            'BASE_DIR': os.path.dirname(sys.executable),
+            'BACKEND_DIR': os.path.join(sys._MEIPASS, 'backend'),
+            'PID_FILE': os.path.join(os.path.dirname(sys.executable), 'app.pid'),
+            'IS_FROZEN': True
+        }
+    else:
+        # 普通开发环境
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return {
+            'BASE_DIR': base,
+            'BACKEND_DIR': os.path.join(base, 'backend'),
+            'PID_FILE': os.path.join(base, 'app.pid'),
+            'IS_FROZEN': False
+        }
+
+_PATHS = _get_paths()
+BASE_DIR = _PATHS['BASE_DIR']
+BACKEND_DIR = _PATHS['BACKEND_DIR']
+PID_FILE = _PATHS['PID_FILE']
+IS_FROZEN = _PATHS['IS_FROZEN']
 
 
 def get_logger():
@@ -240,6 +262,7 @@ def graceful_shutdown():
 def _do_restart():
     """
     执行重启的具体逻辑（在后台线程中执行）
+    支持打包环境和开发环境
     """
     log = get_logger()
     old_pid = os.getpid()
@@ -247,26 +270,38 @@ def _do_restart():
 
     # 阶段1: 启动新进程（先启动，确保服务不中断）
     log.info('阶段 1/2: 启动新进程...')
-    app_path = os.path.join(BACKEND_DIR, 'app.py')
-
-    # 选择合适的 Python 解释器
-    python_exe = sys.executable
-    if sys.platform == 'win32':
-        pythonw = python_exe.replace('python.exe', 'pythonw.exe')
-        if os.path.exists(pythonw):
-            python_exe = pythonw
 
     new_process = None
     try:
         creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-        new_process = subprocess.Popen(
-            [python_exe, app_path],
-            cwd=BASE_DIR,
-            creationflags=creation_flags,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-        log.info(f'新进程已启动: PID={new_process.pid}')
+        
+        if IS_FROZEN:
+            # 打包环境：重启 exe 本身
+            exe_path = sys.executable
+            new_process = subprocess.Popen(
+                [exe_path],
+                cwd=BASE_DIR,
+                creationflags=creation_flags,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            log.info(f'新进程已启动(EXE): PID={new_process.pid}')
+        else:
+            # 开发环境：启动 Python 脚本
+            app_path = os.path.join(BACKEND_DIR, 'app.py')
+            python_exe = sys.executable
+            if sys.platform == 'win32':
+                pythonw = python_exe.replace('python.exe', 'pythonw.exe')
+                if os.path.exists(pythonw):
+                    python_exe = pythonw
+            new_process = subprocess.Popen(
+                [python_exe, app_path],
+                cwd=BASE_DIR,
+                creationflags=creation_flags,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            log.info(f'新进程已启动(Python): PID={new_process.pid}')
     except Exception as e:
         log.error(f'启动新进程失败: {e}')
         return
