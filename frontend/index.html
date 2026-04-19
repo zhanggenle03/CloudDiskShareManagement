@@ -667,7 +667,7 @@
             🔄 重启服务
           </div>
           <div class="dropdown-item danger" onclick="handleExit()">
-            ⏻ 退出程序
+            ⛔ 退出程序
           </div>
         </div>
       </div>
@@ -684,11 +684,11 @@
           <button class="btn btn-primary" id="addResourceBtn" onclick="showAddResourceModal()" style="display:none;padding:6px 14px;font-size:13px;">+ 新建资源</button>
           <div id="batchActions" style="display:none;gap:10px;align-items:center;margin-left:12px;">
             <button class="btn btn-primary" onclick="showBatchTagModal()" style="padding:6px 14px;font-size:13px;">🏷️ 批量添加标签</button>
-            <button class="btn btn-danger" onclick="batchDeleteSelected()" style="padding:6px 14px;font-size:13px;">🗑 删除选中</button>
+            <button class="btn btn-danger" onclick="batchDeleteSelected()" style="padding:6px 14px;font-size:13px;">🗑️ 删除选中</button>
             <button class="btn btn-cancel" id="batchCancelShareBtn" onclick="batchCancelShare()" style="padding:6px 14px;font-size:13px;">🚫 取消分享</button>
           </div>
           <div id="batchResourceActions" style="display:none;gap:10px;align-items:center;margin-left:12px;">
-            <button class="btn btn-danger" onclick="batchDeleteSelectedResources()" style="padding:6px 14px;font-size:13px;">🗑 删除选中资源</button>
+            <button class="btn btn-danger" onclick="batchDeleteSelectedResources()" style="padding:6px 14px;font-size:13px;">🗑️ 删除选中资源</button>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -820,7 +820,7 @@
     <h3>📋 导入记录</h3>
     <div id="importLogContent" style="max-height:360px;overflow-y:auto;margin-top:8px;"></div>
     <div class="modal-actions">
-      <button class="btn btn-danger" onclick="clearImportLogs()">🗑 清空记录</button>
+      <button class="btn btn-danger" onclick="clearImportLogs()">🗑️ 清空记录</button>
       <button class="btn btn-ghost" onclick="closeModal('importLogModal')">关闭</button>
     </div>
   </div>
@@ -1633,7 +1633,7 @@ function renderCard(item) {
     <div class="card-actions">
       <button class="action-btn" onclick="openEditModal(${item.id})">✏️ 编辑</button>
       <button class="action-btn" onclick="copyShare('${escHtml(item.name)}','${item.url}','${item.pwd||''}')">🔗 分享复制</button>
-      <button class="action-btn danger" onclick="softDelete(${item.id})">🗑 删除</button>
+      <button class="action-btn danger" onclick="softDelete(${item.id})">🗑️ 删除</button>
       <button class="action-btn cancel" onclick="cancelShare(${item.id}, '${escHtml(item.name)}', '${escHtml(item.expire || '')}')">🚫 取消分享</button>
     </div>
   </div>`;
@@ -1700,7 +1700,8 @@ function renderTableRow(item) {
       <div class="row-dropdown" id="menu-${item.id}">
         <div class="row-dropdown-item" onclick="openEditModal(${item.id}); closeRowMenu(this)">✏️ 编辑</div>
         <div class="row-dropdown-item" onclick="copyShare('${escHtml(item.name)}','${item.url}','${item.pwd||''}',this); closeRowMenu(this)">🔗 分享复制</div>
-        <div class="row-dropdown-item danger" onclick="softDelete(${item.id}); closeRowMenu(this)">🗑 删除</div>
+        <div class="row-dropdown-item danger" onclick="softDelete(${item.id}); closeRowMenu(this)">🗑️ 删除</div>
+
         <div class="row-dropdown-item cancel" onclick="cancelShare(${item.id}, '${escHtml(item.name)}', '${escHtml(item.expire || '')}'); closeRowMenu(this)">🚫 取消分享</div>
       </div>
     </td>
@@ -2493,7 +2494,7 @@ function updateBatchUI() {
   const batchEl = document.getElementById('batchActions');
   batchEl.style.display = count > 0 ? 'flex' : 'none';
   if (count > 0) {
-    batchEl.querySelector('button:nth-child(2)').textContent = `🗑 删除 (${count})`;
+    batchEl.querySelector('button:nth-child(2)').textContent = `🗑️ 删除 (${count})`;
     document.getElementById('batchCancelShareBtn').textContent = `🚫 取消分享 (${count})`;
   }
 }
@@ -2545,7 +2546,7 @@ function updateResourceBatchUI() {
   const batchEl = document.getElementById('batchResourceActions');
   batchEl.style.display = count > 0 ? 'flex' : 'none';
   if (count > 0) {
-    batchEl.querySelector('button').textContent = `🗑 删除选中资源 (${count})`;
+    batchEl.querySelector('button').textContent = `🗑️ 删除选中资源 (${count})`;
   }
 }
 
@@ -2736,7 +2737,7 @@ function showTagContextMenu(e, tagName) {
       🎨 修改颜色${color ? `<span style="width:14px;height:14px;border-radius:4px;background:${color};margin-left:auto;display:inline-block;"></span>` : ''}
     </div>
     <div class="ctx-sep"></div>
-    <div class="ctx-item" onclick="deleteTagEverywhere('${escHtml(tagName)}')">🗑 删除此标签</div>
+    <div class="ctx-item" onclick="deleteTagEverywhere('${escHtml(tagName)}')">🗑️ 删除此标签</div>
   `;
 
   // 定位
@@ -4169,7 +4170,7 @@ function renderResourceItem(resource) {
         </div>
         <div class="resource-actions-btns" onclick="event.stopPropagation()">
           <button class="res-act-btn" onclick="showEditResourceModal(${resource.id})">✏️ 编辑</button>
-          <button class="res-act-btn danger" onclick="deleteResource(${resource.id})">🗑 删除</button>
+          <button class="res-act-btn danger" onclick="deleteResource(${resource.id})">🗑️ 删除</button>
         </div>
         <span class="resource-arrow">▶</span>
       </div>
