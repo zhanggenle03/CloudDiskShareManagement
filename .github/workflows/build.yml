@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main, master]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: windows-latest
@@ -31,64 +34,20 @@ jobs:
           import os
 
           img = Image.open('frontend/app-icon.jpg')
-          # Convert to RGBA if needed
           if img.mode != 'RGBA':
               img = img.convert('RGBA')
-
-          # Resize to 256x256 for ICO
           sizes = [(16,16), (32,32), (48,48), (64,64), (128,128), (256,256)]
           img.save('app.ico', format='ICO', sizes=sizes)
           print('Icon created: app.ico')
           "
 
-      - name: Build with PyInstaller
-        run: |
-          pyinstaller --name "CloudDiskShareManagement" `
-            --onedir `
-            --windowed `
-            --icon=app.ico `
-            --add-data "frontend;frontend" `
-            --add-data "data;data" `
-            --add-data "backend;backend" `
-            --hidden-import flask `
-            --hidden-import flask_cors `
-            --hidden-import chardet `
-            --hidden-import sqlite3 `
-            --hidden-import certifi `
-            --hidden-import charset_normalizer `
-            --hidden-import idna `
-            --hidden-import urllib3 `
-            --hidden-import requests `
-            --collect-all flask `
-            --collect-all werkzeug `
-            --collect-all jinja2 `
-            --collect-all markupsafe `
-            --collect-all certifi `
-            --collect-all charset_normalizer `
-            --collect-all idna `
-            --collect-all urllib3 `
-            --collect-all requests `
-            --runtime-tmpdir "." `
-            main.py
-
       - name: Create data directory
         run: |
-          if not exist "dist\CloudDiskShareManagement\data" mkdir "dist\CloudDiskShareManagement\data"
+          if not exist "data\logs" mkdir "data\logs"
 
-      - name: Copy additional files
+      - name: Build with PyInstaller
         run: |
-          copy requirements.txt "dist\CloudDiskShareManagement\"
-          (
-            echo CloudDiskShareManagement
-            echo ====================
-            echo.
-            echo Usage:
-            echo   Double-click CloudDiskShareManagement.exe to start
-            echo.
-            echo This application requires no additional dependencies.
-            echo.
-            echo Built with GitHub Actions
-          ) > "dist\CloudDiskShareManagement\README.txt"
+          pyinstaller CloudDiskShareManagement.spec --clean
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
