@@ -5,6 +5,7 @@ import os
 import sys
 import traceback
 import time
+import json
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -446,6 +447,149 @@ def write_one_setting(key):
     value = data.get('value', '') if data else ''
     set_setting(key, str(value))
     return jsonify({'success': True})
+
+
+# ─── 数据备份与恢复 API ──────────────────────────────────────
+@app.route('/api/backup', methods=['GET'])
+def export_backup():
+    """导出所有数据为 JSON 备份文件"""
+    conn = get_conn()
+    c = conn.cursor()
+
+    # 获取所有表名
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+    tables = [row['name'] for row in c.fetchall()]
+
+    backup_data = {
+        'version': '0.5',
+        'export_time': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'tables': {}
+    }
+
+    for table in tables:
+        c.execute(f"SELECT * FROM {table}")
+        rows = [dict(r) for r in c.fetchall()]
+        backup_data['tables'][table] = rows
+
+    conn.close()
+
+    # 生成文件名
+    filename = f"clouddisk_backup_{time.strftime('%Y%m%d_%H%M%S')}.json"
+    log.info(f'导出备份: {filename}, 表数量={len(tables)}')
+
+    from flask import Response
+    return Response(
+        json.dumps(backup_data, ensure_ascii=False, indent=2),
+        mimetype='application/json',
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"'
+        }
+    )
+
+
+@app.route('/api/backup/restore', methods=['POST'])
+def import_backup():
+    """从 JSON 备份文件恢复所有数据"""
+    if 'file' not in request.files:
+        return jsonify({'error': '未上传文件'}), 400
+
+    f = request.files['file']
+    if not f.filename.endswith('.json'):
+        return jsonify({'error': '请上传JSON备份文件'}), 400
+
+    try:
+        raw = f.read()
+        backup_data = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        log.warning(f'备份文件解析失败: {e}')
+        return jsonify({'error': f'备份文件格式错误: {str(e)}'}), 400
+
+    # 验证备份格式
+    if 'tables' not in backup_data or not isinstance(backup_data['tables'], dict):
+        return jsonify({'error': '无效的备份文件格式，缺少 tables 字段'}), 400
+
+    # 允许恢复的表（安全白名单，按依赖顺序排列：先删子表再删主表）
+    allowed_tables = {'shares', 'import_log', 'tag_colors', 'settings', 'accounts', 'resources', 'resource_shares'}
+    # 删除顺序：先删有外键依赖的子表
+    delete_order = ['resource_shares', 'import_log', 'tag_colors', 'settings', 'accounts', 'shares', 'resources']
+
+    conn = get_conn()
+    c = conn.cursor()
+
+    restored_stats = {}
+    try:
+        # 获取现有表结构信息（列名），用于数据兼容性检查
+        table_columns = {}
+        for table in allowed_tables:
+            try:
+                c.execute(f"PRAGMA table_info({table})")
+                cols = [row['name'] for row in c.fetchall()]
+                table_columns[table] = cols
+            except Exception:
+                pass
+
+        # 先按依赖顺序清空所有表
+        for table_name in delete_order:
+            if table_name in table_columns:
+                try:
+                    c.execute(f"DELETE FROM {table_name}")
+                except Exception as e:
+                    log.warning(f'清空表 {table_name} 失败: {e}')
+
+        # 恢复每个表（插入顺序：先主表后子表）
+        insert_order = ['settings', 'tag_colors', 'accounts', 'shares', 'import_log', 'resources', 'resource_shares']
+        for table_name in insert_order:
+            if table_name not in backup_data['tables']:
+                continue
+            rows = backup_data['tables'][table_name]
+
+            if table_name not in table_columns:
+                log.debug(f'跳过不存在的表: {table_name}')
+                continue
+
+            if not isinstance(rows, list):
+                continue
+
+            cols = table_columns[table_name]
+            restored_count = 0
+
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                # 只保留当前表结构中存在的字段
+                filtered = {k: v for k, v in row.items() if k in cols}
+                if not filtered:
+                    continue
+
+                placeholders = ', '.join(['?'] * len(filtered))
+                col_names = ', '.join(filtered.keys())
+                try:
+                    c.execute(
+                        f"INSERT INTO {table_name} ({col_names}) VALUES ({placeholders})",
+                        list(filtered.values())
+                    )
+                    restored_count += 1
+                except Exception as e:
+                    log.warning(f'恢复 {table_name} 行失败: {e}')
+
+            restored_stats[table_name] = restored_count
+
+        conn.commit()
+        conn.close()
+
+        log.info(f'备份恢复完成: {restored_stats}')
+        return jsonify({
+            'success': True,
+            'message': f'恢复完成',
+            'stats': restored_stats,
+            'backup_time': backup_data.get('export_time', '未知')
+        })
+
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        log.error(f'备份恢复失败: {e}')
+        return jsonify({'error': f'恢复失败: {str(e)}'}), 500
 
 
 @app.route('/api/shutdown', methods=['POST'])

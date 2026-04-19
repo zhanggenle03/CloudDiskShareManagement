@@ -1080,7 +1080,7 @@
 
 <!-- General Settings Modal -->
 <div class="modal-overlay" id="generalSettingsModal">
-  <div class="modal" style="width:480px;">
+  <div class="modal" style="width:520px;">
     <h3>⚙️ 通用设置</h3>
     <div id="generalSettingsContent" style="font-size:13px;color:var(--gray-600);">
       <!-- 设置项将由 JS 动态渲染 -->
@@ -3073,6 +3073,24 @@ async function showGeneralSettingsModal() {
         </div>
       </div>
     </div>
+
+    <!-- 数据备份与恢复 -->
+    <div style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;">
+      <div style="margin-bottom:14px;">
+        <div style="font-size:14px;font-weight:600;color:var(--text);">💾 数据备份与恢复</div>
+        <div style="font-size:12px;color:var(--gray-400);margin-top:2px;">备份所有数据（分享记录、账号、设置、标签、资源等）</div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary" onclick="exportBackup()" style="flex:1;font-size:13px;padding:8px 16px;">
+          📥 导出备份
+        </button>
+        <button class="btn" onclick="document.getElementById('restoreFileInput').click()" style="flex:1;font-size:13px;padding:8px 16px;border:1px solid var(--border);">
+          📤 恢复数据
+        </button>
+        <input type="file" id="restoreFileInput" accept=".json" style="display:none;" onchange="importBackup(this)">
+      </div>
+      <div id="backupStatus" style="font-size:11px;color:var(--gray-400);margin-top:8px;text-align:center;"></div>
+    </div>
   `;
 
   // 绑定总开关
@@ -3121,6 +3139,95 @@ async function saveCancelConfirmSetting() {
   await saveSetting('cancelShareConfirm', val);
   _settingsCache.cancelShareConfirm = val;
   toast('设置已保存', 'success');
+}
+
+// ── 备份恢复 ──────────────────────────────────────────────
+async function exportBackup() {
+  const statusEl = document.getElementById('backupStatus');
+  if (statusEl) statusEl.textContent = '正在导出...';
+  try {
+    const res = await fetch(API + '/api/backup');
+    if (!res.ok) throw new Error('导出失败');
+    const blob = await res.blob();
+    // 从 Content-Disposition 获取文件名
+    const cd = res.headers.get('Content-Disposition') || '';
+    let filename = 'clouddisk_backup.json';
+    const match = cd.match(/filename[^;=\n]*=(["']?)(.*?)\1(?:;|$)/);
+    if (match && match[2]) filename = match[2];
+    // 创建下载链接
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    if (statusEl) statusEl.textContent = '✅ 备份已导出';
+    toast('备份导出成功', 'success');
+  } catch (e) {
+    console.error('导出备份失败:', e);
+    if (statusEl) statusEl.textContent = '❌ 导出失败';
+    toast('备份导出失败', 'error');
+  }
+}
+
+async function importBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('backupStatus');
+
+  if (!confirm('⚠️ 恢复数据将覆盖当前所有数据，此操作不可撤销！\n\n确定要恢复数据吗？')) {
+    input.value = '';
+    return;
+  }
+
+  if (statusEl) statusEl.textContent = '正在恢复...';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(API + '/api/backup/restore', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || '恢复失败');
+    }
+
+    // 构建恢复统计信息
+    const stats = data.stats || {};
+    const parts = [];
+    for (const [table, count] of Object.entries(stats)) {
+      if (count > 0) {
+        const nameMap = {
+          shares: '分享记录', accounts: '账号', settings: '设置',
+          tag_colors: '标签颜色', import_log: '导入日志',
+          resources: '资源', resource_shares: '资源关联'
+        };
+        parts.push(`${nameMap[table] || table}: ${count}条`);
+      }
+    }
+    const backupTime = data.backup_time || '未知';
+    const msg = parts.length > 0 ? `恢复完成（来源: ${backupTime}）\n${parts.join('、')}` : '恢复完成';
+
+    if (statusEl) statusEl.textContent = '✅ 数据已恢复';
+    toast(msg, 'success');
+
+    // 恢复后刷新页面以重新加载所有数据
+    setTimeout(() => {
+      location.reload();
+    }, 1500);
+
+  } catch (e) {
+    console.error('恢复备份失败:', e);
+    if (statusEl) statusEl.textContent = '❌ 恢复失败: ' + e.message;
+    toast('恢复失败: ' + e.message, 'error');
+  }
+
+  input.value = '';
 }
 
 // 点击其他地方关闭菜单
