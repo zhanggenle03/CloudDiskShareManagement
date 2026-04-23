@@ -16,6 +16,7 @@
     --primary-light: #EEF1FF;
     --baidu: #2468F2;
     --quark: #8B5CF6;
+    --uc: #F97316;
     --success: #10B981;
     --warning: #F59E0B;
     --danger: #EF4444;
@@ -312,6 +313,7 @@
                   flex-shrink: 0; min-width: 48px; text-align: center; }
   .source-badge.baidu { background: rgba(36,104,242,.12); color: var(--baidu); }
   .source-badge.quark { background: rgba(139,92,246,.12); color: var(--quark); }
+  .source-badge.uc { background: rgba(249,115,22,.12); color: var(--uc); }
   .account-name-tag { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 4px;
                       font-size: 10px; font-weight: 500; flex-shrink: 0;
                       background: var(--gray-100); color: var(--gray-500); border: 1px solid var(--border); }
@@ -590,6 +592,10 @@
       <div class="nav-item" data-source="quark" onclick="setSource('quark', this)">
         <span class="icon">🟣</span> 夸克网盘
         <span class="badge" id="navQuark">0</span>
+      </div>
+      <div class="nav-item" data-source="uc" onclick="setSource('uc', this)">
+        <span class="icon">🟠</span> UC网盘
+        <span class="badge" id="navUc">0</span>
       </div>
     </div>
 
@@ -1132,6 +1138,9 @@
           <div class="account-platform-item" data-platform="baidu" onclick="switchAccountPlatform('baidu', this)">
             <span>🔵 百度网盘</span>
           </div>
+          <div class="account-platform-item" data-platform="uc" onclick="switchAccountPlatform('uc', this)">
+            <span>🟠 UC网盘</span>
+          </div>
         </div>
       </div>
 
@@ -1272,6 +1281,7 @@
           <option value="">全部平台</option>
           <option value="baidu">百度网盘</option>
           <option value="quark">夸克网盘</option>
+          <option value="uc">UC网盘</option>
         </select>
         <label class="picker-expire-filter">
           <input type="checkbox" id="previewExpireFilter" onchange="onPreviewFilterChange()">
@@ -1313,6 +1323,7 @@
         <option value="">全部平台</option>
         <option value="baidu">百度网盘</option>
         <option value="quark">夸克网盘</option>
+        <option value="uc">UC网盘</option>
       </select>
       <label class="picker-expire-filter">
         <input type="checkbox" id="pickerExpireFilter" onchange="onPickerFilterChange()">
@@ -1572,8 +1583,8 @@ function renderCard(item) {
   // 处理source格式：可能是"平台"或"平台:账号名称"
   let sourceClass, sourceName;
   const platform = item.source && item.source.includes(':') ? item.source.split(':')[0] : item.source;
-  sourceClass = platform === 'baidu' ? 'baidu' : 'quark';
-  sourceName = platform === 'baidu' ? '百度网盘' : '夸克网盘';
+  sourceClass = platform === 'baidu' ? 'baidu' : (platform === 'uc' ? 'uc' : 'quark');
+  sourceName = platform === 'baidu' ? '百度网盘' : (platform === 'uc' ? 'UC网盘' : '夸克网盘');
   const expireClass = getExpireClass(item.expire);
   const isExpired = item.expire === '已失效';
   const selectedAttr = state.selected.has(item.id) ? 'checked' : '';
@@ -1644,8 +1655,8 @@ function renderTableRow(item) {
   // 处理source格式：可能是"平台"或"平台:账号名称"
   let sourceClass, sourceName;
   const platform = item.source && item.source.includes(':') ? item.source.split(':')[0] : item.source;
-  sourceClass = platform === 'baidu' ? 'baidu' : 'quark';
-  sourceName = platform === 'baidu' ? '百度' : '夸克';
+  sourceClass = platform === 'baidu' ? 'baidu' : (platform === 'uc' ? 'uc' : 'quark');
+  sourceName = platform === 'baidu' ? '百度' : (platform === 'uc' ? 'UC' : '夸克');
   const expireClass = getExpireClass(item.expire);
   const isExpired = item.expire === '已失效';
   const selectedAttr = state.selected.has(item.id) ? 'checked' : '';
@@ -2117,6 +2128,7 @@ async function loadStats() {
   document.getElementById('navAll').textContent = s.total || 0;
   document.getElementById('navBaidu').textContent = s.baidu_count || 0;
   document.getElementById('navQuark').textContent = s.quark_count || 0;
+  document.getElementById('navUc').textContent = s.uc_count || 0;
 
   // 更新标签颜色缓存
   if (s.tags) {
@@ -2848,7 +2860,9 @@ async function showImportLogs() {
           if (l.source) {
             const platform = l.source.includes(':') ? l.source.split(':')[0] : l.source;
             sourceClass = platform;
-            sourceName = platform === 'baidu' ? '百度' : '夸克';
+            if (platform === 'baidu') sourceName = '百度';
+            else if (platform === 'uc') sourceName = 'UC';
+            else sourceName = '夸克';
           }
           return `
           <tr>
@@ -3280,7 +3294,8 @@ let syncState = {
   accounts: [],
   platforms: {
     quark: { accounts: [], selected: new Set() },
-    baidu: { accounts: [], selected: new Set() }
+    baidu: { accounts: [], selected: new Set() },
+    uc: { accounts: [], selected: new Set() }
   },
   currentPlatform: null
 };
@@ -3300,8 +3315,12 @@ async function loadSyncPlatforms() {
     const baiduRes = await fetch(API + '/api/accounts?platform=baidu');
     const baiduAccounts = (await baiduRes.json() || []).filter(acc => acc.cookie && acc.cookie.trim().length > 0);
     
+    // 加载UC账号（显示所有有Cookie的账号，包括未验证的）
+    const ucRes = await fetch(API + '/api/accounts?platform=uc');
+    const ucAccounts = (await ucRes.json() || []).filter(acc => acc.cookie && acc.cookie.trim().length > 0);
+    
     // 更新状态
-    syncState.accounts = [...quarkAccounts, ...baiduAccounts];
+    syncState.accounts = [...quarkAccounts, ...baiduAccounts, ...ucAccounts];
     syncState.platforms.quark = {
       accounts: quarkAccounts,
       selected: new Set(quarkAccounts.filter(acc => acc.is_valid === 1).map(acc => acc.id)) // 默认只选中已验证的
@@ -3309,6 +3328,10 @@ async function loadSyncPlatforms() {
     syncState.platforms.baidu = {
       accounts: baiduAccounts,
       selected: new Set(baiduAccounts.filter(acc => acc.is_valid === 1).map(acc => acc.id)) // 默认只选中已验证的
+    };
+    syncState.platforms.uc = {
+      accounts: ucAccounts,
+      selected: new Set(ucAccounts.filter(acc => acc.is_valid === 1).map(acc => acc.id)) // 默认只选中已验证的
     };
     
     // 渲染平台列表
@@ -3329,9 +3352,11 @@ function renderSyncPlatforms() {
   
   const quarkCount = syncState.platforms.quark.accounts.length;
   const baiduCount = syncState.platforms.baidu.accounts.length;
+  const ucCount = syncState.platforms.uc.accounts.length;
   
   const quarkSelected = syncState.platforms.quark.selected.size;
   const baiduSelected = syncState.platforms.baidu.selected.size;
+  const ucSelected = syncState.platforms.uc.selected.size;
   
   let html = '';
   
@@ -3373,6 +3398,25 @@ function renderSyncPlatforms() {
     </div>
   `;
   
+  // UC平台 - 始终显示
+  html += `
+    <div class="sync-platform-item ${syncState.currentPlatform === 'uc' ? 'active' : ''}" 
+         data-platform="uc" 
+         onclick="selectSyncPlatform('uc')"
+         style="${ucCount === 0 ? 'opacity:0.5;' : ''}">
+      <div class="sync-platform-left">
+        <input type="checkbox" class="sync-platform-checkbox" 
+               ${ucCount > 0 && ucSelected === ucCount ? 'checked' : ''} 
+               ${ucCount === 0 ? 'disabled' : ''}
+               onclick="event.stopPropagation();togglePlatformAll('uc')">
+        <span class="sync-platform-name">🟠 UC网盘</span>
+        <span class="sync-platform-count">
+          <span class="${ucCount === 0 ? '' : 'selected'}">${ucSelected}</span>/${ucCount}
+        </span>
+      </div>
+    </div>
+  `;
+  
   platformListEl.innerHTML = html;
 }
 
@@ -3388,7 +3432,8 @@ function selectSyncPlatform(platform) {
   // 更新右栏标题
   const platformNames = {
     quark: '🟣 夸克网盘账号',
-    baidu: '🔵 百度网盘账号'
+    baidu: '🔵 百度网盘账号',
+    uc: '🟠 UC网盘账号'
   };
   document.getElementById('syncAccountPanelTitle').textContent = platformNames[platform];
   
@@ -3410,7 +3455,7 @@ function renderSyncAccounts() {
   const selected = syncState.platforms[platform].selected;
   
   if (accounts.length === 0) {
-    const platformName = platform === 'quark' ? '夸克网盘' : '百度网盘';
+    const platformName = platform === 'quark' ? '夸克网盘' : (platform === 'baidu' ? '百度网盘' : 'UC网盘');
     listEl.innerHTML = `
       <div class="sync-account-empty">
         <div style="font-size:24px;margin-bottom:8px;">📭</div>
@@ -3653,7 +3698,7 @@ function toggleCookieHelp() {
     drawer.style.maxHeight = '0';
     setTimeout(() => {
       drawer.style.display = 'none';
-      const platformName = platform === 'baidu' ? '百度网盘' : '夸克网盘';
+      const platformName = platform === 'baidu' ? '百度网盘' : (platform === 'uc' ? 'UC网盘' : '夸克网盘');
       btn.textContent = '如何获取' + platformName + 'Cookie?';
     }, 300);
   }
@@ -3680,6 +3725,22 @@ function updateCookieHelpContent(platform) {
       <p style="margin:8px 0 0 0;"><strong>注意：</strong>Cookie 通常包含 <code style="padding:2px 4px;background:var(--gray-200);border-radius:3px;">BDUSS</code>、<code style="padding:2px 4px;background:var(--gray-200);border-radius:3px;">STOKEN</code> 等关键字段</p>
     `;
     btnEl.textContent = '如何获取百度网盘Cookie?';
+  } else if (platform === 'uc') {
+    titleEl.textContent = '🍪 如何获取UC网盘Cookie';
+    contentEl.innerHTML = `
+      <p style="margin:0 0 8px 0;"><strong>步骤：</strong></p>
+      <ol style="margin:0;padding-left:20px;">
+        <li>使用电脑浏览器打开 <a href="https://drive.uc.cn" target="_blank" style="color:var(--primary);">https://drive.uc.cn</a></li>
+        <li>登录你的UC网盘账号</li>
+        <li>按 <kbd style="padding:2px 6px;background:var(--gray-200);border-radius:3px;">F12</kbd> 打开开发者工具</li>
+        <li>切换到 <strong>Network（网络）</strong> 标签页</li>
+        <li>刷新页面，找到任意一个请求</li>
+        <li>点击请求，查看 <strong>Request Headers（请求标头）</strong></li>
+        <li>找到 <code style="padding:2px 4px;background:var(--gray-200);border-radius:3px;">Cookie</code> 字段并复制完整内容</li>
+      </ol>
+      <p style="margin:8px 0 0 0;"><strong>注意：</strong>Cookie 通常包含 <code style="padding:2px 4px;background:var(--gray-200);border-radius:3px;">__pus</code>、<code style="padding:2px 4px;background:var(--gray-200);border-radius:3px;">_tk_</code> 等关键字段</p>
+    `;
+    btnEl.textContent = '如何获取UC网盘Cookie?';
   } else {
     titleEl.textContent = '🍪 如何获取夸克网盘Cookie';
     contentEl.innerHTML = `
@@ -3706,7 +3767,7 @@ function switchAccountPlatform(platform, el) {
   document.querySelectorAll('.account-platform-item').forEach(item => item.classList.remove('active'));
   el.classList.add('active');
   // 更新标题
-  const titles = { quark: '夸克网盘账号', baidu: '百度网盘账号' };
+  const titles = { quark: '夸克网盘账号', baidu: '百度网盘账号', uc: 'UC网盘账号' };
   document.getElementById('accountListTitle').textContent = titles[platform] || '账号列表';
   // 更新帮助内容
   updateCookieHelpContent(platform);
@@ -3887,6 +3948,8 @@ function showAddAccountForm() {
   const cookieInput = document.getElementById('newAccountCookie');
   if (platform === 'baidu') {
     cookieInput.placeholder = '粘贴百度网盘Cookie(以BAIDUID开头)';
+  } else if (platform === 'uc') {
+    cookieInput.placeholder = '粘贴UC网盘Cookie(以__pus或_tk_开头)';
   } else {
     cookieInput.placeholder = '粘贴夸克网盘Cookie(以_pans_pid或pcsid开头)';
   }
@@ -4013,9 +4076,13 @@ function startEditAccount(accountId) {
     cookieHint.textContent = '';
   } else {
     const platform = acc.platform || accountState.currentPlatform || 'quark';
-    cookieInput.placeholder = platform === 'baidu'
-      ? '粘贴百度网盘Cookie(以BAIDUID开头)'
-      : '粘贴夸克网盘Cookie(以_pans_pid或pcsid开头)';
+    if (platform === 'baidu') {
+      cookieInput.placeholder = '粘贴百度网盘Cookie(以BAIDUID开头)';
+    } else if (platform === 'uc') {
+      cookieInput.placeholder = '粘贴UC网盘Cookie(以__pus或_tk_开头)';
+    } else {
+      cookieInput.placeholder = '粘贴夸克网盘Cookie(以_pans_pid或pcsid开头)';
+    }
     cookieStatus.textContent = '';
     cookieHint.textContent = '留空则不设置Cookie';
   }
@@ -4192,7 +4259,7 @@ let resourceState = {
   availableShares: [],
   filteredShares: [],
   shareSearchKeyword: '',
-  previewPlatform: '',      // 预览区平台筛选: '' | 'baidu' | 'quark'
+  previewPlatform: '',      // 预览区平台筛选: '' | 'baidu' | 'quark' | 'uc'
   previewHideExpired: true, // 预览区是否过滤已失效（默认勾选）
   previewSearchKeyword: '',  // 预览区搜索关键字
   pickerPlatform: '',       // 弹窗平台筛选
@@ -4256,8 +4323,8 @@ function renderResourceItem(resource) {
   }
   
   platforms.forEach(p => {
-    const cls = p === 'baidu' ? 'baidu' : 'quark';
-    const name = p === 'baidu' ? '百度网盘' : '夸克网盘';
+    const cls = p === 'baidu' ? 'baidu' : (p === 'uc' ? 'uc' : 'quark');
+    const name = p === 'baidu' ? '百度网盘' : (p === 'uc' ? 'UC网盘' : '夸克网盘');
     platformTagsHtml += `<span class="res-platform-tag ${cls}">${name}</span>`;
   });
 
@@ -4306,8 +4373,8 @@ function renderDrawerShareItem(share, resourceId) {
   // 平台标签
   let sourceClass, sourceName;
   const platform = (share.source || '').includes(':') ? (share.source || '').split(':')[0] : share.source;
-  sourceClass = platform === 'baidu' ? 'baidu' : platform === 'quark' ? 'quark' : '';
-  sourceName = platform === 'baidu' ? '百度' : platform === 'quark' ? '夸克' : platform;
+  sourceClass = platform === 'baidu' ? 'baidu' : (platform === 'uc' ? 'uc' : (platform === 'quark' ? 'quark' : ''));
+  sourceName = platform === 'baidu' ? '百度' : (platform === 'uc' ? 'UC' : (platform === 'quark' ? '夸克' : platform));
 
   const pwdHtml = share.pwd
     ? `<span class="drawer-share-pwd" title="复制提取码" onclick="copyText('${escHtml(share.pwd)}',this)">🔑${escHtml(share.pwd)}</span>`
@@ -4593,8 +4660,8 @@ function renderPickerList() {
 function renderShareItemHtml(s) {
   const isSelected = resourceState.selectedShareIds.has(s.id);
   const p = (s.source || '').includes(':') ? (s.source || '').split(':')[0] : s.source;
-  const platform = p === 'baidu' ? '百度' : p === 'quark' ? '夸克' : '';
-  const platClass = p === 'baidu' ? 'baidu' : p === 'quark' ? 'quark' : '';
+  const platform = p === 'baidu' ? '百度' : (p === 'uc' ? 'UC' : (p === 'quark' ? '夸克' : ''));
+  const platClass = p === 'baidu' ? 'baidu' : (p === 'uc' ? 'uc' : (p === 'quark' ? 'quark' : ''));
   const shortName = s.name.length > 30 ? s.name.slice(0, 30) + '…' : s.name;
   const expireClass = getExpireClass(s.expire);
   const expireText = s.expire || '未知';

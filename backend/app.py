@@ -284,6 +284,10 @@ def cancel_shares():
                 from baidu_api import BaiduShareManager
                 manager = BaiduShareManager(cookie)
                 result = manager.cancel_share(share_ids)
+            elif platform == 'uc':
+                from uc_api import UCShareManager
+                manager = UCShareManager(cookie)
+                result = manager.cancel_share(share_ids)
             else:
                 result = {'success': False, 'message': f'不支持的平台: {platform}', 'cancelled': 0, 'failed': len(share_ids)}
         except Exception as e:
@@ -644,8 +648,8 @@ def create_account():
     name = data.get('name', '').strip()
     cookie = data.get('cookie', '').strip()
     remark = data.get('remark', '').strip()
-    if not platform or platform not in ('baidu', 'quark'):
-        return jsonify({'error': '平台参数无效，应为 baidu 或 quark'}), 400
+    if not platform or platform not in ('baidu', 'quark', 'uc'):
+        return jsonify({'error': '平台参数无效，应为 baidu、quark 或 uc'}), 400
     if not name:
         return jsonify({'error': '请输入账号名称'}), 400
     account_id = add_account(platform, name, cookie, remark)
@@ -802,6 +806,34 @@ def test_account_cookie(account_id):
             update_account(account_id, {'is_valid': -1, 'last_verified_at': current_time})
             return jsonify({'valid': False, 'message': f'验证失败: {str(e)}'})
 
+    elif platform == 'uc':
+        # UC网盘在线验证
+        try:
+            from uc_api import UCShareManager
+            share_manager = UCShareManager(cookie)
+            
+            # 调用 validate_cookie 方法验证
+            is_valid = share_manager.validate_cookie()
+            
+            if is_valid is None:
+                log.error('UC Cookie验证失败：验证过程中出错')
+                update_account(account_id, {'is_valid': -1, 'last_verified_at': current_time})
+                return jsonify({'valid': False, 'message': '验证失败：网络错误或服务器无响应'})
+            elif is_valid:
+                log.info('UC Cookie验证成功')
+                update_account(account_id, {'is_valid': 1, 'last_verified_at': current_time})
+                return jsonify({'valid': True, 'message': 'Cookie有效'})
+            else:
+                log.warning('UC Cookie验证失败：Cookie已失效')
+                update_account(account_id, {'is_valid': -1, 'last_verified_at': current_time})
+                return jsonify({'valid': False, 'message': 'Cookie已失效，请重新登录后获取新Cookie'})
+                
+        except Exception as e:
+            log.error(f'验证UC Cookie失败: {e}')
+            log.error(traceback.format_exc())
+            update_account(account_id, {'is_valid': -1, 'last_verified_at': current_time})
+            return jsonify({'valid': False, 'message': f'验证失败: {str(e)}'})
+
     return jsonify({'valid': False, 'message': '不支持的网盘平台'})
 
 
@@ -904,7 +936,7 @@ def sync_now():
         if not cookie or len(cookie) < 50:
             return jsonify({'success': False, 'error': '该账号Cookie未配置或格式不正确'}), 400
         
-        if not platform or platform not in ('baidu', 'quark'):
+        if not platform or platform not in ('baidu', 'quark', 'uc'):
             return jsonify({'success': False, 'error': '账号平台类型无效'}), 400
         
         sync_mgr = get_sync_manager()
@@ -947,6 +979,16 @@ def test_cookie():
         elif platform == 'baidu':
             from baidu_api import BaiduShareManager
             share_manager = BaiduShareManager(cookie)
+            shares = share_manager.get_share_list(page=1, page_size=1)
+            if shares is None:
+                return jsonify({'valid': False, 'message': 'Cookie已失效，请重新登录后获取新Cookie'})
+            if isinstance(shares, list) and len(shares) >= 0:
+                return jsonify({'valid': True, 'message': 'Cookie有效'})
+            return jsonify({'valid': False, 'message': '无法获取分享列表'})
+        
+        elif platform == 'uc':
+            from uc_api import UCShareManager
+            share_manager = UCShareManager(cookie)
             shares = share_manager.get_share_list(page=1, page_size=1)
             if shares is None:
                 return jsonify({'valid': False, 'message': 'Cookie已失效，请重新登录后获取新Cookie'})

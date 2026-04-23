@@ -24,7 +24,7 @@ def init_db():
     c.executescript("""
         CREATE TABLE IF NOT EXISTS shares (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            source      TEXT    NOT NULL,          -- 'baidu' | 'quark'
+            source      TEXT    NOT NULL,          -- 'baidu' | 'quark' | 'uc'
             name        TEXT    NOT NULL,           -- 文件/分享名称
             url         TEXT    NOT NULL,           -- 分享链接
             pwd         TEXT,                       -- 提取码
@@ -67,7 +67,7 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS accounts (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            platform    TEXT    NOT NULL,          -- 'baidu' | 'quark'
+            platform    TEXT    NOT NULL,          -- 'baidu' | 'quark' | 'uc'
             name        TEXT    NOT NULL DEFAULT '', -- 账号名称(用户自定义)
             cookie      TEXT    DEFAULT '',         -- 网盘Cookie
             uk          TEXT    DEFAULT '',         -- 百度网盘用户ID（仅百度需要）
@@ -342,6 +342,7 @@ def get_stats():
             COUNT(*) as total,
             SUM(CASE WHEN source LIKE 'baidu%' THEN 1 ELSE 0 END) as baidu_count,
             SUM(CASE WHEN source LIKE 'quark%' THEN 1 ELSE 0 END) as quark_count,
+            SUM(CASE WHEN source LIKE 'uc%' THEN 1 ELSE 0 END) as uc_count,
             SUM(CASE WHEN expire='永久有效' THEN 1 ELSE 0 END) as permanent,
             SUM(CASE WHEN expire IN ('已失效','分享已过期','分享失败') THEN 1 ELSE 0 END) as expired,
             SUM(CASE WHEN expire NOT IN ('已失效','分享已过期','分享失败','永久有效') AND expire != '' THEN 1 ELSE 0 END) as expiring
