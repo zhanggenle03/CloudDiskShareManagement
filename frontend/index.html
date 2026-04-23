@@ -783,7 +783,7 @@
     </div>
     <div class="form-group">
       <label>账号名称</label>
-      <input type="text" id="editAccountName" placeholder="数据来源账号（最长7字符）" maxlength="7">
+      <input type="text" id="editShareAccountName" placeholder="数据来源账号（最长7字符）" maxlength="7">
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('editModal')">取消</button>
@@ -2275,7 +2275,7 @@ async function openEditModal(id) {
   document.getElementById('editExpire').value = item.expire || '永久有效';
   document.getElementById('editTags').value = item.tags || '';
   document.getElementById('editNotes').value = item.notes || '';
-  document.getElementById('editAccountName').value = item.account_name || '';
+  document.getElementById('editShareAccountName').value = item.account_name || '';
   document.getElementById('editModal').classList.add('show');
 }
 
@@ -2287,7 +2287,7 @@ async function saveEdit() {
     expire: document.getElementById('editExpire').value,
     tags: document.getElementById('editTags').value,
     notes: document.getElementById('editNotes').value,
-    account_name: document.getElementById('editAccountName').value,
+    account_name: document.getElementById('editShareAccountName').value,
   };
   const res = await api('PUT', `/api/shares/${id}`, data);
   if (res.success) {
