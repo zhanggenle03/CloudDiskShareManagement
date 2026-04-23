@@ -1752,8 +1752,11 @@ function getExpireClass(expire) {
   if (!expire) return 'unknown';
   if (expire === '永久有效') return 'permanent';
   if (expire === '已失效') return 'expired';
-  // 限时有效：包含"后"（如"14小时后"）或"有效"（如"7天有效"）但不是永久或已失效
-  if (expire.includes('后') || expire.includes('有效')) return 'expiring';
+  // 限时有效：包含"后"（如"14小时后过期"）、"有效"（如"7天有效"）、
+  // "今天失效"、"即将过期"等均归为 expiring（橙色警示）
+  if (expire.includes('后') || expire.includes('有效') ||
+      expire.includes('今天') || expire.includes('今日') ||
+      expire === '即将过期') return 'expiring';
   return 'unknown';
 }
 
