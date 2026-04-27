@@ -445,7 +445,7 @@
   .page-btn:disabled { opacity: .4; cursor: default; }
 
   /* ── Modal ── */
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100;
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200;
                    display: none; align-items: center; justify-content: center; }
   .modal-overlay.show { display: flex; }
   .modal { background: var(--bg-card); border-radius: 14px; width: 480px; max-width: 95vw;
@@ -460,6 +460,14 @@
   .form-group input:focus, .form-group textarea:focus { border-color: var(--primary); }
   .form-group textarea { min-height: 80px; resize: vertical; }
   .modal-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 8px; flex-shrink: 0; }
+  .share-detail-modal { width: 520px; max-width: 95vw; padding: 0; overflow: hidden; }
+  .share-detail-modal .modal-header { display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .share-detail-modal .modal-header h3 { margin: 0; font-size: 15px; }
+  .share-detail-modal .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--gray-400); padding: 0 4px; }
+  .share-detail-modal .modal-close:hover { color: var(--gray-800); }
+  .share-detail-modal .modal-body { max-height: 70vh; overflow-y: auto; }
+  #shareDetailModal { z-index: 150; }
 
   /* ── Toggle Switch ── */
   .toggle-switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
@@ -1369,6 +1377,43 @@
   </div>
 </div>
 
+<!-- Delete Confirm Modal -->
+<div class="modal-overlay" id="deleteConfirmModal">
+  <div class="modal" style="width:420px;">
+    <h3>🗑️ 删除确认</h3>
+    <p id="deleteConfirmInfo" style="font-size:13px;color:var(--gray-600);margin-bottom:18px;line-height:1.6;"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeDeleteConfirmModal()">返回</button>
+      <button class="btn btn-danger" id="deleteConfirmBtn" onclick="executeDelete()">🗑️ 确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic Confirm Modal -->
+<div class="modal-overlay" id="genericConfirmModal">
+  <div class="modal" style="width:420px;">
+    <h3 id="genericConfirmTitle">确认操作</h3>
+    <p id="genericConfirmInfo" style="font-size:13px;color:var(--gray-600);margin-bottom:18px;line-height:1.6;"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="genericConfirmCancelBtn" onclick="closeGenericConfirmModal()">取消</button>
+      <button class="btn btn-primary" id="genericConfirmOkBtn" onclick="executeGenericConfirm()">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share Detail Modal -->
+<div class="modal-overlay" id="shareDetailModal">
+  <div class="modal share-detail-modal">
+    <div class="modal-header">
+      <h3>📄 分享详情</h3>
+      <button class="modal-close" onclick="closeShareDetailModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="shareDetailBody" style="padding:20px;">
+      <div style="text-align:center;padding:40px;color:var(--gray-400);">加载中...</div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
 
@@ -1652,7 +1697,7 @@ function renderCard(item) {
     <div class="card-actions">
       <button class="action-btn" onclick="openEditModal(${item.id})">✏️ 编辑</button>
       <button class="action-btn" onclick="copyShare('${escHtml(item.name)}','${item.url}','${item.pwd||''}')">🔗 分享复制</button>
-      <button class="action-btn danger" onclick="softDelete(${item.id})">🗑️ 删除</button>
+      <button class="action-btn danger" onclick="softDelete(${item.id}, '${item.name ? item.name.toString().replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"') : ''}')">🗑️ 删除</button>
       <button class="action-btn cancel" onclick="cancelShare(${item.id}, '${escHtml(item.name)}', '${escHtml(item.expire || '')}')">🚫 取消分享</button>
     </div>
   </div>`;
@@ -1719,7 +1764,7 @@ function renderTableRow(item) {
       <div class="row-dropdown" id="menu-${item.id}">
         <div class="row-dropdown-item" onclick="openEditModal(${item.id}); closeRowMenu(this)">✏️ 编辑</div>
         <div class="row-dropdown-item" onclick="copyShare('${escHtml(item.name)}','${item.url}','${item.pwd||''}',this); closeRowMenu(this)">🔗 分享复制</div>
-        <div class="row-dropdown-item danger" onclick="softDelete(${item.id}); closeRowMenu(this)">🗑️ 删除</div>
+        <div class="row-dropdown-item danger" onclick="softDelete(${item.id}, '${item.name ? item.name.toString().replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"') : ''}'); closeRowMenu(this)">🗑️ 删除</div>
 
         <div class="row-dropdown-item cancel" onclick="cancelShare(${item.id}, '${escHtml(item.name)}', '${escHtml(item.expire || '')}'); closeRowMenu(this)">🚫 取消分享</div>
       </div>
@@ -2322,11 +2367,103 @@ async function saveEdit() {
 }
 
 // ── Delete ────────────────────────────────────────────────
-async function softDelete(id) {
-  if (!confirm('确认删除这条分享记录？')) return;
-  await api('DELETE', `/api/shares/${id}`);
-  toast('已删除', 'success');
-  loadShares(); loadStats();
+let _deleteMode = ''; // 'single' | 'batch' | 'batchResources'
+let _deleteIds = [];
+let _deleteItemName = ''; // 用于单个删除时显示名称
+
+async function softDelete(id, name) {
+  _deleteMode = 'single';
+  _deleteIds = [id];
+
+  // 优先使用传入的名称，否则从 state.shares 查找
+  let displayName = name;
+  if (!displayName) {
+    const item = state.shares ? state.shares.find(s => s.id == id) : null;
+    displayName = item ? item.name : `ID:${id}`;
+  }
+
+  document.getElementById('deleteConfirmInfo').innerHTML =
+    `即将删除分享：<strong style="color:var(--text-primary);">${escHtml(displayName)}</strong><br>删除后记录将进入回收站，可恢复。`;
+
+  document.getElementById('deleteConfirmModal').classList.add('show');
+}
+
+function closeDeleteConfirmModal() {
+  document.getElementById('deleteConfirmModal').classList.remove('show');
+  _deleteMode = '';
+  _deleteIds = [];
+  _deleteItemName = '';
+}
+
+async function executeDelete() {
+  closeDeleteConfirmModal();
+
+  if (_deleteMode === 'single') {
+    await api('DELETE', `/api/shares/${_deleteIds[0]}`);
+    toast('已删除', 'success');
+    loadShares(); loadStats();
+  } else if (_deleteMode === 'batch') {
+    await api('POST', '/api/shares/batch_delete', { ids: _deleteIds });
+    toast(`已删除 ${_deleteIds.length} 条`, 'success');
+    state.selected.clear();
+    loadShares(); loadStats();
+  } else if (_deleteMode === 'batchResources') {
+    let success = 0, fail = 0;
+    for (const id of _deleteIds) {
+      try {
+        const res = await fetch(API + '/api/resources/' + id, { method: 'DELETE' });
+        if (res.ok) success++;
+        else fail++;
+      } catch { fail++; }
+    }
+    toast(`删除完成：成功 ${success}，失败 ${fail}`, success > 0 ? 'success' : 'error');
+    resourceState.selectedResourceIds.clear();
+    updateResourceBatchUI();
+    await loadResourceView();
+  }
+}
+
+// ── Generic Confirm Dialog ────────────────────────────────
+let _genericConfirmCallback = null;
+let _genericConfirmCancelCallback = null;
+
+function showGenericConfirm(title, message, okText, cancelText, onConfirm, onCancel) {
+  document.getElementById('genericConfirmTitle').textContent = title;
+  document.getElementById('genericConfirmInfo').innerHTML = message;
+  document.getElementById('genericConfirmOkBtn').textContent = okText || '确认';
+  document.getElementById('genericConfirmCancelBtn').textContent = cancelText || '取消';
+
+  // 设置按钮样式
+  const okBtn = document.getElementById('genericConfirmOkBtn');
+  if (title.includes('删除') || title.includes('清空') || title.includes('恢复')) {
+    okBtn.className = 'btn btn-danger';
+  } else if (title.includes('退出') || title.includes('重启')) {
+    okBtn.className = 'btn btn-cancel';
+  } else {
+    okBtn.className = 'btn btn-primary';
+  }
+
+  _genericConfirmCallback = onConfirm;
+  _genericConfirmCancelCallback = onCancel || null;
+
+  document.getElementById('genericConfirmModal').classList.add('show');
+}
+
+function closeGenericConfirmModal() {
+  document.getElementById('genericConfirmModal').classList.remove('show');
+  if (_genericConfirmCancelCallback) {
+    _genericConfirmCancelCallback();
+  }
+  _genericConfirmCallback = null;
+  _genericConfirmCancelCallback = null;
+}
+
+async function executeGenericConfirm() {
+  const callback = _genericConfirmCallback;
+  closeGenericConfirmModal();
+  if (callback) {
+    await callback();
+  }
 }
 
 // ── Cancel Share ──────────────────────────────────────────
@@ -2576,33 +2713,30 @@ function updateResourceBatchUI() {
 async function batchDeleteSelectedResources() {
   const ids = Array.from(resourceState.selectedResourceIds);
   if (ids.length === 0) return;
+
+  _deleteMode = 'batchResources';
+  _deleteIds = ids;
+
   const names = ids.map(id => {
     const r = resourceState.resources.find(res => res.id === id);
     return r ? r.name : `ID:${id}`;
   });
-  if (!confirm(`确认删除 ${ids.length} 个资源？\n\n${names.join('\n')}\n\n注意：资源关联的分享链接不会被删除，只是取消关联。`)) return;
 
-  let success = 0, fail = 0;
-  for (const id of ids) {
-    try {
-      const res = await fetch(API + '/api/resources/' + id, { method: 'DELETE' });
-      if (res.ok) success++;
-      else fail++;
-    } catch { fail++; }
-  }
-  toast(`删除完成：成功 ${success}，失败 ${fail}`, success > 0 ? 'success' : 'error');
-  resourceState.selectedResourceIds.clear();
-  updateResourceBatchUI();
-  await loadResourceView();
+  document.getElementById('deleteConfirmInfo').innerHTML =
+    `即将删除 <strong style="color:var(--text-primary);">${ids.length}</strong> 个资源：<br><strong>${escHtml(names.join('，'))}</strong><br><br><span style="color:var(--gray-500);font-size:12px;">注意：资源关联的分享链接不会被删除，只是取消关联。</span>`;
+
+  document.getElementById('deleteConfirmModal').classList.add('show');
 }
 
 async function batchDeleteSelected() {
   if (state.selected.size === 0) return;
-  if (!confirm(`确认删除选中的 ${state.selected.size} 条记录？`)) return;
-  await api('POST', '/api/shares/batch_delete', { ids: [...state.selected] });
-  toast(`已删除 ${state.selected.size} 条`, 'success');
-  state.selected.clear();
-  loadShares(); loadStats();
+  _deleteMode = 'batch';
+  _deleteIds = [...state.selected];
+
+  document.getElementById('deleteConfirmInfo').innerHTML =
+    `即将批量删除 <strong style="color:var(--text-primary);">${_deleteIds.length}</strong> 条分享记录。<br>删除后记录将进入回收站，可恢复。`;
+
+  document.getElementById('deleteConfirmModal').classList.add('show');
 }
 
 // ── Batch Tag ─────────────────────────────────────────────
@@ -2733,11 +2867,18 @@ async function delTagFromCard(e, id, tag) {
 
 // ── Delete tag from all records ──────────────────────────
 async function deleteTagEverywhere(tagName) {
-  if (!confirm(`确认删除标签「${tagName}」？\n将从所有记录中移除该标签。`)) return;
-  await api('DELETE', `/api/tags/${encodeURIComponent(tagName)}`);
-  toast(`已删除标签「${tagName}」`, 'success');
-  if (state.tag === tagName) { state.tag = ''; state.page = 1; }
-  loadShares(); loadStats();
+  showGenericConfirm(
+    '🗑️ 删除标签确认',
+    `确认删除标签 <strong>「${escHtml(tagName)}」</strong>？<br>将从所有记录中移除该标签。`,
+    '确认删除',
+    '取消',
+    async () => {
+      await api('DELETE', `/api/tags/${encodeURIComponent(tagName)}`);
+      toast(`已删除标签「${tagName}」`, 'success');
+      if (state.tag === tagName) { state.tag = ''; state.page = 1; }
+      loadShares(); loadStats();
+    }
+  );
 }
 
 // ── Tag Context Menu ─────────────────────────────────────
@@ -2888,23 +3029,60 @@ async function showImportLogs() {
 }
 
 async function clearImportLogs() {
-  if (!confirm('确认清空所有导入记录？此操作不可恢复。')) return;
-  
-  try {
-    const res = await api('DELETE', '/api/import_logs');
-    if (res.success) {
-      toast('已清空导入记录', 'success');
-      showImportLogs(); // 刷新显示
-    } else {
-      toast(res.error || '清空失败', 'error');
+  showGenericConfirm(
+    '🗑️ 清空导入记录',
+    '确认清空所有导入记录？<br><span style="color:var(--danger);">此操作不可恢复。</span>',
+    '确认清空',
+    '取消',
+    async () => {
+      try {
+        const res = await api('DELETE', '/api/import_logs');
+        if (res.success) {
+          toast('已清空导入记录', 'success');
+          showImportLogs(); // 刷新显示
+        } else {
+          toast(res.error || '清空失败', 'error');
+        }
+      } catch (e) {
+        toast('清空请求失败', 'error');
+      }
     }
-  } catch (e) {
-    toast('清空请求失败', 'error');
-  }
+  );
 }
 
 // ── Modal Helpers ─────────────────────────────────────────
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+async function showShareDetail(shareId) {
+  const modal = document.getElementById('shareDetailModal');
+  const body = document.getElementById('shareDetailBody');
+  body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">加载中...</div>';
+  modal.classList.add('show');
+
+  // 先在前端 state 里查找
+  let share = null;
+  for (const res of resourceState.resources) {
+    const found = (res.shares || []).find(s => s.id === shareId);
+    if (found) { share = found; break; }
+  }
+
+  if (share) {
+    body.innerHTML = renderCard(share);
+  } else {
+    // state 中没找到，从 API 拉取完整数据
+    try {
+      const data = await api('GET', `/api/shares/${shareId}`);
+      body.innerHTML = renderCard(data);
+    } catch(e) {
+      body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger);">加载失败</div>';
+    }
+  }
+}
+
+function closeShareDetailModal() {
+  document.getElementById('shareDetailModal').classList.remove('show');
+  document.getElementById('shareDetailBody').innerHTML = '';
+}
 document.querySelectorAll('.modal-overlay').forEach(el => {
   el.addEventListener('click', e => { if (e.target === el) el.classList.remove('show'); });
 });
@@ -2924,26 +3102,37 @@ async function toggleTheme() {
 
 function handleExit() {
   closeMoreMenu();
-  if (!confirm('确定要退出程序吗？')) return;
-  fetch('/api/shutdown', { method: 'POST' }).catch(() => {});
-  document.body.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:center;height:100vh;
-                background:var(--bg);color:var(--text-secondary);font-size:15px;flex-direction:column;gap:12px;">
-      <div style="font-size:28px;">&#x1F44B;</div>
-      <div>程序已安全退出</div>
-      <div style="font-size:12px;color:var(--gray-400);">你可以关闭此页面</div>
-    </div>`;
+  showGenericConfirm(
+    '🚪 退出程序',
+    '确定要退出程序吗？<br><span style="color:var(--gray-500);font-size:12px;">退出后需要重新启动程序</span>',
+    '确认退出',
+    '返回',
+    () => {
+      fetch('/api/shutdown', { method: 'POST' }).catch(() => {});
+      document.body.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;height:100vh;
+                    background:var(--bg);color:var(--text-secondary);font-size:15px;flex-direction:column;gap:12px;">
+          <div style="font-size:28px;">&#x1F44B;</div>
+          <div>程序已安全退出</div>
+          <div style="font-size:12px;color:var(--gray-400);">你可以关闭此页面</div>
+        </div>`;
+    }
+  );
 }
 
 function handleRestart() {
   closeMoreMenu();
-  if (!confirm('确定要重启服务吗？')) return;
+  showGenericConfirm(
+    '🔄 重启服务',
+    '确定要重启服务吗？<br><span style="color:var(--gray-500);font-size:12px;">重启过程中页面会短暂不可用</span>',
+    '确认重启',
+    '返回',
+    () => {
+      // 禁用按钮防止重复点击
+      const btn = event.target.closest('.dropdown-item');
+      if (btn) btn.style.pointerEvents = 'none';
 
-  // 禁用按钮防止重复点击
-  const btn = event.target.closest('.dropdown-item');
-  if (btn) btn.style.pointerEvents = 'none';
-
-  // 显示重启进度界面
+      // 显示重启进度界面
   const restartUI = `
     <div style="display:flex;align-items:center;justify-content:center;height:100vh;
                 background:var(--bg);color:var(--text-secondary);font-size:15px;flex-direction:column;gap:16px;">
@@ -3026,6 +3215,8 @@ function handleRestart() {
     .catch(err => {
       updateProgress('重启失败', '请求失败: ' + err.message, 0);
     });
+    } // 结束回调函数
+  ); // 结束 showGenericConfirm 调用
 }
 
 function toggleMoreMenu() {
@@ -3224,57 +3415,64 @@ async function importBackup(input) {
   if (!file) return;
   const statusEl = document.getElementById('backupStatus');
 
-  if (!confirm('⚠️ 恢复数据将覆盖当前所有数据，此操作不可撤销！\n\n确定要恢复数据吗？')) {
-    input.value = '';
-    return;
-  }
+  showGenericConfirm(
+    '⚠️ 恢复数据',
+    '恢复数据将覆盖当前所有数据，<span style="color:var(--danger);">此操作不可撤销！</span><br><br>确定要恢复数据吗？',
+    '确认恢复',
+    '取消',
+    async () => {
+      if (statusEl) statusEl.textContent = '正在恢复...';
 
-  if (statusEl) statusEl.textContent = '正在恢复...';
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch(API + '/api/backup/restore', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
 
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch(API + '/api/backup/restore', {
-      method: 'POST',
-      body: formData
-    });
-    const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || '恢复失败');
+        }
 
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || '恢复失败');
-    }
+        // 构建恢复统计信息
+        const stats = data.stats || {};
+        const parts = [];
+        for (const [table, count] of Object.entries(stats)) {
+          if (count > 0) {
+            const nameMap = {
+              shares: '分享记录', accounts: '账号', settings: '设置',
+              tag_colors: '标签颜色', import_log: '导入日志',
+              resources: '资源', resource_shares: '资源关联'
+            };
+            parts.push(`${nameMap[table] || table}: ${count}条`);
+          }
+        }
+        const backupTime = data.backup_time || '未知';
+        const msg = parts.length > 0 ? `恢复完成（来源: ${backupTime}）\n${parts.join('、')}` : '恢复完成';
 
-    // 构建恢复统计信息
-    const stats = data.stats || {};
-    const parts = [];
-    for (const [table, count] of Object.entries(stats)) {
-      if (count > 0) {
-        const nameMap = {
-          shares: '分享记录', accounts: '账号', settings: '设置',
-          tag_colors: '标签颜色', import_log: '导入日志',
-          resources: '资源', resource_shares: '资源关联'
-        };
-        parts.push(`${nameMap[table] || table}: ${count}条`);
+        if (statusEl) statusEl.textContent = '✅ 数据已恢复';
+        toast(msg, 'success');
+
+        // 恢复后刷新页面以重新加载所有数据
+        setTimeout(() => {
+          location.reload();
+        }, 1500);
+
+      } catch (e) {
+        console.error('恢复备份失败:', e);
+        if (statusEl) statusEl.textContent = '❌ 恢复失败: ' + e.message;
+        toast('恢复失败: ' + e.message, 'error');
       }
+
+      input.value = '';
+    },
+    () => {
+      // 取消回调
+      input.value = '';
     }
-    const backupTime = data.backup_time || '未知';
-    const msg = parts.length > 0 ? `恢复完成（来源: ${backupTime}）\n${parts.join('、')}` : '恢复完成';
-
-    if (statusEl) statusEl.textContent = '✅ 数据已恢复';
-    toast(msg, 'success');
-
-    // 恢复后刷新页面以重新加载所有数据
-    setTimeout(() => {
-      location.reload();
-    }, 1500);
-
-  } catch (e) {
-    console.error('恢复备份失败:', e);
-    if (statusEl) statusEl.textContent = '❌ 恢复失败: ' + e.message;
-    toast('恢复失败: ' + e.message, 'error');
-  }
-
-  input.value = '';
+  );
 }
 
 // 点击其他地方关闭菜单
@@ -4333,20 +4531,27 @@ async function testAccountCookie(accountId) {
 async function deleteAccount(accountId) {
   const acc = accountState.accounts.find(a => a.id === accountId);
   const name = acc ? acc.name : '';
-  if (!confirm(`确认删除账号"${name}"？此操作不可恢复。`)) return;
 
-  try {
-    const res = await fetch(API + '/api/accounts/' + accountId, { method: 'DELETE' });
-    const data = await res.json();
-    if (data.success) {
-      toast('账号已删除', 'success');
-      loadAccounts();
-    } else {
-      toast(data.error || '删除失败', 'error');
+  showGenericConfirm(
+    '🗑️ 删除账号',
+    `确认删除账号 <strong>"${escHtml(name)}"</strong>？<br><span style="color:var(--danger);">此操作不可恢复。</span>`,
+    '确认删除',
+    '取消',
+    async () => {
+      try {
+        const res = await fetch(API + '/api/accounts/' + accountId, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          toast('账号已删除', 'success');
+          loadAccounts();
+        } else {
+          toast(data.error || '删除失败', 'error');
+        }
+      } catch (e) {
+        toast('删除失败', 'error');
+      }
     }
-  } catch (e) {
-    toast('删除失败', 'error');
-  }
+  );
 }
 
 
@@ -4500,6 +4705,7 @@ function renderDrawerShareItem(share, resourceId) {
       <button class="drawer-share-copy" onclick="copyText('${share.url}', this)">复制</button>
       ${pwdHtml}
       ${expireHtml}
+      <button class="drawer-share-detail" onclick="event.stopPropagation();showShareDetail(${share.id})">详情</button>
       <button class="drawer-share-remove" onclick="event.stopPropagation();removeShareFromResource(${resourceId}, ${share.id})">移除</button>
     </div>`;
 }
@@ -4925,18 +5131,25 @@ async function saveResource() {
 async function deleteResource(resourceId) {
   const resource = resourceState.resources.find(r => r.id === resourceId);
   const name = resource ? resource.name : '';
-  if (!confirm(`确认删除资源「${name}」？\n仅删除分组关系，不会删除关联的原始分享记录。`)) return;
 
-  try {
-    await api('DELETE', `/api/resources/${resourceId}`);
-    toast('资源已删除', 'success');
-    if (resourceState.expandedId === resourceId) {
-      resourceState.expandedId = null;
+  showGenericConfirm(
+    '🗑️ 删除资源',
+    `确认删除资源 <strong>「${escHtml(name)}」</strong>？<br><span style="color:var(--gray-500);font-size:12px;">仅删除分组关系，不会删除关联的原始分享记录。</span>`,
+    '确认删除',
+    '取消',
+    async () => {
+      try {
+        await api('DELETE', `/api/resources/${resourceId}`);
+        toast('资源已删除', 'success');
+        if (resourceState.expandedId === resourceId) {
+          resourceState.expandedId = null;
+        }
+        await loadResourceView();
+      } catch (e) {
+        toast(e.error || '删除失败', 'error');
+      }
     }
-    await loadResourceView();
-  } catch (e) {
-    toast(e.error || '删除失败', 'error');
-  }
+  );
 }
 
 async function removeShareFromResource(resourceId, shareId) {
@@ -5174,6 +5387,8 @@ init();
   .drawer-share-expire.valid { background: #D1FAE5; color: #059669; border: 1px solid #A7F3D0; }
   .drawer-share-expire.warning { background: #FFEDD5; color: #EA580C; border: 1px solid #FED7AA; }
   .drawer-share-pwd-placeholder { width: 72px; flex-shrink: 0; padding: 2px 6px; border-radius: 5px; font-size: 11px; color: var(--gray-400); text-align: center; border: 1px solid transparent; box-sizing: border-box; }
+  .drawer-share-detail { width: 48px; flex-shrink: 0; padding: 3px 0; border: 1px solid var(--border); border-radius: 5px; background: transparent; cursor: pointer; font-size: 12px; color: var(--gray-400); transition: all .12s; text-align: center; }
+  .drawer-share-detail:hover { border-color: var(--primary); color: var(--primary); background: rgba(79,110,247,.06); }
   .drawer-share-remove { width: 48px; flex-shrink: 0; padding: 3px 0; border: 1px solid var(--border); border-radius: 5px; background: transparent; cursor: pointer; font-size: 12px; color: var(--gray-400); transition: all .12s; text-align: center; }
   .drawer-share-remove:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,.06); }
 
