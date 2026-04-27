@@ -4474,20 +4474,33 @@ function renderDrawerShareItem(share, resourceId) {
   let sourceClass, sourceName;
   const platform = (share.source || '').includes(':') ? (share.source || '').split(':')[0] : share.source;
   sourceClass = platform === 'baidu' ? 'baidu' : (platform === 'uc' ? 'uc' : (platform === 'quark' ? 'quark' : ''));
-  sourceName = platform === 'baidu' ? '百度' : (platform === 'uc' ? 'UC' : (platform === 'quark' ? '夸克' : platform));
+  sourceName = platform === 'baidu' ? '百度网盘' : (platform === 'uc' ? 'UC网盘' : (platform === 'quark' ? '夸克网盘' : platform));
 
+  // 提取码：有则显示可复制，无则显示"-"占位
   const pwdHtml = share.pwd
-    ? `<span class="drawer-share-pwd" title="复制提取码" onclick="copyText('${escHtml(share.pwd)}',this)">🔑${escHtml(share.pwd)}</span>`
-    : '';
+    ? `<span class="drawer-share-pwd" title="复制提取码" onclick="copyText('${escHtml(share.pwd)}',this)">${escHtml(share.pwd)}</span>`
+    : `<span class="drawer-share-pwd-placeholder">—</span>`;
+
+  // 有效期标签：三种状态
+  // 已失效=red，永久有效=green，其他有效=orange
+  let expireHtml = '';
+  if (share.expire) {
+    const isExpired = share.expire === '已失效';
+    const isPermanent = share.expire === '永久有效';
+    let expireClass = 'expired';
+    if (!isExpired) expireClass = isPermanent ? 'valid' : 'warning';
+    expireHtml = `<span class="drawer-share-expire ${expireClass}">${escHtml(share.expire)}</span>`;
+  }
 
   return `
     <div class="drawer-share-item">
-      <span class="drawer-share-source"><span class="source-badge ${sourceClass}" style="font-size:10px;padding:1px 6px;">${escHtml(sourceName || '')}</span></span>
+      <span class="drawer-share-source"><span class="source-badge ${sourceClass}">${escHtml(sourceName || '')}</span></span>
       <span class="drawer-share-name" title="${escHtml(share.name)}">${escHtml(share.name)}</span>
       <a class="drawer-share-url" href="${share.url}" target="_blank" title="${share.url}">${escHtml(share.url)}</a>
+      <button class="drawer-share-copy" onclick="copyText('${share.url}', this)">复制</button>
       ${pwdHtml}
-      <button class="drawer-share-copy" onclick="copyText('${share.url}', this)" title="复制链接">📋</button>
-      <button class="drawer-share-remove" onclick="event.stopPropagation();removeShareFromResource(${resourceId}, ${share.id})" title="移除关联">✕</button>
+      ${expireHtml}
+      <button class="drawer-share-remove" onclick="event.stopPropagation();removeShareFromResource(${resourceId}, ${share.id})">移除</button>
     </div>`;
 }
 
@@ -5145,27 +5158,23 @@ init();
   .drawer-share-item {
     display: flex; align-items: center; gap: 10px; padding: 10px 14px;
     background: var(--bg-card); border-radius: 8px; border: 1px solid var(--border);
-    transition: all .12s; flex-wrap: wrap;
+    transition: all .12s; flex-wrap: nowrap;
   }
   .drawer-share-item:hover { border-color: var(--primary-light); background: var(--primary-light); }
-  .drawer-share-name { flex: 1; font-size: 13px; font-weight: 500; min-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .drawer-share-url { color: var(--primary); font-size: 12px; flex: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; }
+  .drawer-share-source { width: 90px; flex-shrink: 0; display: flex; align-items: center; }
+  .drawer-share-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+  .drawer-share-url { width: 200px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--primary); font-size: 12px; text-decoration: none; }
   .drawer-share-url:hover { text-decoration: underline; }
-  .drawer-share-pwd { padding: 2px 8px; border-radius: 5px; font-size: 11px; font-weight: 600;
-    background: var(--pwd-bg); color: var(--pwd-text); border: 1px solid var(--pwd-border); cursor: pointer; white-space: nowrap; }
-  .drawer-share-pwd:hover { filter: brightness(1.1); }
-  .drawer-share-source { font-size: 11px; font-weight: 600; flex-shrink: 0; }
-  .drawer-share-copy {
-    padding: 3px 8px; border: 1px solid var(--border); border-radius: 5px;
-    background: transparent; cursor: pointer; font-size: 12px; color: var(--gray-400);
-    flex-shrink: 0; transition: all .12s;
-  }
+  .drawer-share-copy { width: 48px; flex-shrink: 0; padding: 3px 0; border: 1px solid var(--border); border-radius: 5px; background: transparent; cursor: pointer; font-size: 12px; color: var(--gray-400); transition: all .12s; text-align: center; }
   .drawer-share-copy:hover { border-color: var(--primary); color: var(--primary); background: rgba(79,110,247,.06); }
-  .drawer-share-remove {
-    padding: 3px 8px; border: 1px solid var(--border); border-radius: 5px;
-    background: transparent; cursor: pointer; font-size: 12px; color: var(--gray-400);
-    flex-shrink: 0; transition: all .12s;
-  }
+  .drawer-share-pwd { width: 72px; flex-shrink: 0; padding: 2px 6px; border-radius: 5px; font-size: 11px; font-weight: 600; background: var(--pwd-bg); color: var(--pwd-text); border: 1px solid var(--pwd-border); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+  .drawer-share-pwd:hover { filter: brightness(1.1); }
+  .drawer-share-expire { width: 80px; flex-shrink: 0; padding: 2px 6px; border-radius: 5px; font-size: 11px; font-weight: 600; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drawer-share-expire.expired { background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; }
+  .drawer-share-expire.valid { background: #D1FAE5; color: #059669; border: 1px solid #A7F3D0; }
+  .drawer-share-expire.warning { background: #FFEDD5; color: #EA580C; border: 1px solid #FED7AA; }
+  .drawer-share-pwd-placeholder { width: 72px; flex-shrink: 0; padding: 2px 6px; border-radius: 5px; font-size: 11px; color: var(--gray-400); text-align: center; border: 1px solid transparent; box-sizing: border-box; }
+  .drawer-share-remove { width: 48px; flex-shrink: 0; padding: 3px 0; border: 1px solid var(--border); border-radius: 5px; background: transparent; cursor: pointer; font-size: 12px; color: var(--gray-400); transition: all .12s; text-align: center; }
   .drawer-share-remove:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,.06); }
 
   /* 资源空状态 */
