@@ -150,10 +150,12 @@ def upsert_share(share: dict) -> dict:
     """
     插入或更新分享记录（按 url 去重）
     
-    更新策略（2026-04-03）：
+    更新策略：
     - 如果新数据的提取码为空，保留数据库中已有的提取码（不覆盖）
     - 如果新数据有提取码，使用新数据的提取码
-    - 其他字段正常更新（name, expire, view_count等）
+    - 名称保护（2026-04-27）：如果新名称包含失效字样（如"分享已过期"），
+      保留数据库中的原始名称，方便用户识别哪些内容失效了
+    - 有效期（expire）字段正常更新为最新状态
     - 如果记录已存在但被软删除（is_deleted=1），视为"新增"而非"更新"
     
     这样可以保留CSV导入时的提取码，同时通过API更新状态
@@ -161,7 +163,7 @@ def upsert_share(share: dict) -> dict:
     conn = get_conn()
     c = conn.cursor()
     # 检查是否已存在（包括被软删除的）
-    c.execute("SELECT id, pwd, is_deleted, account_name, share_id, account_id FROM shares WHERE url = ?", (share['url'],))
+    c.execute("SELECT id, name, pwd, is_deleted, account_name, share_id, account_id FROM shares WHERE url = ?", (share['url'],))
     row = c.fetchone()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -173,6 +175,9 @@ def upsert_share(share: dict) -> dict:
     # 提取 share_id（网盘端分享ID）和 account_id（关联账号ID）
     new_share_id = share.get('share_id', '')
     new_account_id = share.get('account_id', 0) or 0
+
+    # 失效名称关键词列表：百度网盘在链接失效后会将文件名修改为这些字样
+    EXPIRED_NAME_KEYWORDS = ('分享已过期', '分享已失效', '分享失败', '链接已失效', '已过期', '已失效')
 
     if row:
         # 如果记录被软删除，视为"新增"（重新激活）
@@ -216,19 +221,29 @@ def upsert_share(share: dict) -> dict:
         existing_account_id = row['account_id'] or 0
         final_account_id = new_account_id if new_account_id else existing_account_id
 
+        # 名称保护：如果新名称是失效字样（百度网盘在链接失效后会将文件名替换），
+        # 保留数据库中已有的原始名称，方便用户识别哪些内容失效了
+        existing_name = row['name'] or ''
+        new_name = share.get('name', '')
+        if new_name and any(kw in new_name for kw in EXPIRED_NAME_KEYWORDS) and existing_name:
+            final_name = existing_name
+            log.debug(f'名称保护：跳过失效字样 "{new_name}"，保留原名 "{existing_name}"')
+        else:
+            final_name = new_name
+
         c.execute("""
             UPDATE shares SET name=?, pwd=?, share_time=?, expire=?,
                 parent_dir=?, view_count=?, account_name=?, share_id=?, account_id=?,
                 is_deleted=0, updated_at=?
             WHERE url=?
         """, (
-            share.get('name'), final_pwd, share.get('share_time'),
+            final_name, final_pwd, share.get('share_time'),
             share.get('expire'), share.get('parent_dir'), share.get('view_count', -1),
             final_account_name, final_share_id, final_account_id, now, share['url']
         ))
         conn.commit()
         conn.close()
-        log.info(f'更新分享: {share.get("name")[:30]}..., url={share.get("url")[:50]}...')
+        log.info(f'更新分享: {final_name[:30]}..., url={share.get("url")[:50]}...')
         return {'action': 'updated', 'id': row['id']}
     else:
         log.debug(f'插入分享: {share.get("name")[:30]}..., url={share.get("url")[:50]}...')
