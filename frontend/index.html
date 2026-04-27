@@ -1271,8 +1271,15 @@
       <label>关联分享链接 <small style="color:var(--gray-400);font-weight:normal;">(选择已有的分享进行关联)</small></label>
       
       <!-- 已选预览 -->
-      <div class="selected-shares-preview" id="selectedSharesPreview">
-        <span style="color:var(--gray-400);font-size:12px;padding:4px 0;" id="noSelectedHint">暂未选择分享</span>
+      <div class="selected-shares-preview-outer" id="selectedSharesPreviewOuter">
+        <span class="selected-shares-count" id="selectedSharesCount" style="display:none;">已选 <strong id="selectedSharesCountNum">0</strong> 个:</span>
+        <div class="selected-shares-preview-scrollarea" id="selectedSharesPreviewScrollArea">
+          <div class="selected-shares-preview" id="selectedSharesPreview">
+            <span style="color:var(--gray-400);font-size:12px;padding:4px 0;" id="noSelectedHint">暂未选择分享</span>
+          </div>
+        </div>
+        <button class="chips-scroll-btn chips-btn-l" id="chipsScrollLeft" onclick="scrollChips(-1)" style="display:none;" tabindex="-1">‹</button>
+        <button class="chips-scroll-btn chips-btn-r" id="chipsScrollRight" onclick="scrollChips(1)" style="display:none;" tabindex="-1">›</button>
       </div>
       
       <!-- 预览区筛选栏：与全量选择器弹窗一致 -->
@@ -4802,16 +4809,36 @@ function removeSelectedChip(shareId) {
 }
 
 function renderSelectedSharesPreview() {
+  const scrollArea = document.getElementById('selectedSharesPreviewScrollArea');
   const preview = document.getElementById('selectedSharesPreview');
-  const hint = document.getElementById('noSelectedHint');
+  const countEl = document.getElementById('selectedSharesCount');
+  const countNum = document.getElementById('selectedSharesCountNum');
+  const btnL = document.getElementById('chipsScrollLeft');
+  const btnR = document.getElementById('chipsScrollRight');
   const ids = Array.from(resourceState.selectedShareIds);
-  
+
   if (ids.length === 0) {
     preview.innerHTML = '<span style="color:var(--gray-400);font-size:12px;padding:4px 0;" id="noSelectedHint">暂未选择分享，可在下方列表中选择</span>';
+    countEl.style.display = 'none';
+    btnL.style.display = 'none';
+    btnR.style.display = 'none';
+    updateChipsScrollBtns();
     return;
   }
 
-  // 从 availableShares 中找到对应名称
+  // 使用 onscroll 属性绑定，避免 addEventListener 重复/丢失问题
+  scrollArea.onscroll = updateChipsScrollBtns;
+
+  // 重置滚动位置到最左
+  scrollArea.scrollLeft = 0;
+
+  // 已选数量固定显示
+  countNum.textContent = ids.length;
+  countEl.style.display = 'inline';
+  btnL.style.display = 'flex';
+  btnR.style.display = 'flex';
+
+  // 渲染 chips
   const chips = ids.map(id => {
     const share = resourceState.availableShares.find(s => s.id === id);
     const name = share ? share.name : `ID:${id}`;
@@ -4821,9 +4848,31 @@ function renderSelectedSharesPreview() {
       <span class="remove-chip" onclick="removeSelectedChip(${id})">×</span>
     </span>`;
   }).join('');
-  preview.innerHTML = `
-    <span style="font-size:11px;color:var(--gray-500);white-space:nowrap;flex-shrink:0;">已选 ${ids.length} 个:</span>
-    ${chips}`;
+  preview.innerHTML = chips;
+
+  // 等待 DOM 渲染完成后同步按钮状态（确保 scrollWidth/clientWidth 已计算）
+  requestAnimationFrame(() => {
+    updateChipsScrollBtns();
+  });
+}
+
+function updateChipsScrollBtns() {
+  const scrollArea = document.getElementById('selectedSharesPreviewScrollArea');
+  const btnL = document.getElementById('chipsScrollLeft');
+  const btnR = document.getElementById('chipsScrollRight');
+  if (!scrollArea || !btnL || !btnR) return;
+  const atStart = scrollArea.scrollLeft <= 2;
+  const atEnd = scrollArea.scrollLeft + scrollArea.clientWidth >= scrollArea.scrollWidth - 2;
+  btnL.style.opacity = atStart ? '0.3' : '1';
+  btnL.style.pointerEvents = atStart ? 'none' : 'auto';
+  btnR.style.opacity = atEnd ? '0.3' : '1';
+  btnR.style.pointerEvents = atEnd ? 'none' : 'auto';
+}
+
+function scrollChips(dir) {
+  const scrollArea = document.getElementById('selectedSharesPreviewScrollArea');
+  if (!scrollArea) return;
+  scrollArea.scrollBy({ left: dir * 120, behavior: 'smooth' });
 }
 
 async function saveResource() {
@@ -5070,6 +5119,7 @@ init();
   .res-platform-tag { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
   .res-platform-tag.baidu { background: rgba(36,104,242,.12); color: var(--baidu); }
   .res-platform-tag.quark { background: rgba(139,92,246,.12); color: var(--quark); }
+  .res-platform-tag.uc { background: rgba(249,115,22,.12); color: var(--uc); }
   .resource-arrow { color: var(--gray-400); font-size: 12px; transition: transform .2s; flex-shrink: 0; }
   .resource-item.expanded .resource-arrow { transform: rotate(90deg); }
 
@@ -5211,6 +5261,7 @@ init();
   .selector-platform-tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 10px; font-weight: 600; line-height: 18px; }
   .selector-platform-tag.baidu { background: rgba(36,104,242,.12); color: #2468F2; }
   .selector-platform-tag.quark { background: rgba(139,92,246,.12); color: #8B5CF6; }
+  .selector-platform-tag.uc { background: rgba(249,115,22,.12); color: var(--uc); }
   /* 选择器弹窗筛选栏 */
   .share-preview-filters,
   .share-picker-filters {
@@ -5237,7 +5288,22 @@ init();
   .share-search-box { flex: 1; min-width: 120px; box-sizing: border-box; padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px; outline: none; background: var(--bg-input); color: var(--text); transition: border-color .15s; }
   .share-search-box:focus { border-color: var(--primary); }
   .share-search-box::placeholder { color: var(--gray-400); }
-  .selected-shares-preview { display: flex; flex-wrap: nowrap; gap: 5px; padding: 6px 10px; background: var(--bg); border: 1.5px dashed var(--border); border-radius: 8px; height: 36px; overflow-x: auto; overflow-y: hidden; box-sizing: border-box; margin-bottom: 10px; flex-shrink: 0; align-items: center; }
+  /* 已选分享预览区：外层固定，中间滚动，按钮悬浮右侧 */
+  .selected-shares-preview-outer { display: flex; align-items: center; gap: 4px;
+    background: var(--bg); border: 1.5px dashed var(--border); border-radius: 8px;
+    height: 36px; padding: 0 6px; box-sizing: border-box; margin-bottom: 10px;
+    flex-shrink: 0; position: relative; }
+  .selected-shares-count { font-size: 11px; color: var(--gray-500); white-space: nowrap; flex-shrink: 0; z-index: 1; background: var(--bg); padding-right: 4px; }
+  .selected-shares-count strong { color: var(--primary); }
+  .selected-shares-preview-scrollarea { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; -ms-overflow-style: none; height: 100%; display: flex; align-items: center; }
+  .selected-shares-preview-scrollarea::-webkit-scrollbar { display: none; }
+  .selected-shares-preview { display: flex; flex-wrap: nowrap; gap: 5px; align-items: center; padding: 0 4px; }
+  .chips-scroll-btn { flex-shrink: 0; width: 20px; height: 24px; border: none;
+    background: var(--gray-100); color: var(--gray-500); border-radius: 4px;
+    cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center;
+    justify-content: center; padding: 0; transition: background .15s, color .15s; user-select: none; z-index: 1; }
+  .chips-scroll-btn:hover { background: var(--primary-light); color: var(--primary); }
   .selected-share-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 12px; font-size: 12px; background: var(--primary-light); color: var(--primary); font-weight: 500; flex-shrink: 0; }
   .selected-share-chip .remove-chip { cursor: pointer; opacity: .6; font-size: 11px; line-height: 1; }
   .selected-share-chip .remove-chip:hover { opacity: 1; color: var(--danger); }
@@ -5252,9 +5318,7 @@ init();
   .selector-platform-tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 10px; font-weight: 600; line-height: 18px; }
   .selector-platform-tag.baidu { background: rgba(36,104,242,.12); color: #2468F2; }
   .selector-platform-tag.quark { background: rgba(139,92,246,.12); color: #8B5CF6; }
-  .selected-share-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 12px; font-size: 12px; background: var(--primary-light); color: var(--primary); font-weight: 500; }
-  .selected-share-chip .remove-chip { cursor: pointer; opacity: .6; font-size: 11px; line-height: 1; }
-  .selected-share-chip .remove-chip:hover { opacity: 1; color: var(--danger); }
+  .selector-platform-tag.uc { background: rgba(249,115,22,.12); color: var(--uc); }
 
   /* 视图Tab切换 */
   .view-tabs { display: flex; gap: 0; border: 1.5px solid var(--gray-200); border-radius: 8px; overflow: hidden; height: 34px; }
