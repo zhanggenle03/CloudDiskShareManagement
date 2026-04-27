@@ -313,7 +313,7 @@ def get_shares(source=None, expire_filter=None, keyword=None, tag=None,
 
 
 def update_share(share_id: int, fields: dict):
-    allowed = {'name', 'pwd', 'expire', 'tags', 'notes', 'is_deleted', 'account_name', 'share_id', 'account_id'}
+    allowed = {'name', 'tags', 'notes', 'is_deleted', 'account_name', 'share_id', 'account_id'}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return False

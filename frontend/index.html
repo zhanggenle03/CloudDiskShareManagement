@@ -771,21 +771,7 @@
     <input type="hidden" id="editId">
     <div class="form-group">
       <label>文件名称</label>
-      <input type="text" id="editName">
-    </div>
-    <div class="form-group">
-      <label>提取码</label>
-      <input type="text" id="editPwd" placeholder="无提取码则留空">
-    </div>
-    <div class="form-group">
-      <label>有效期状态</label>
-      <select id="editExpire">
-        <option>永久有效</option>
-        <option>已失效</option>
-        <option>7天后失效</option>
-        <option>3天后失效</option>
-        <option>1天后失效</option>
-      </select>
+      <input type="text" id="editName" readonly>
     </div>
     <div class="form-group">
       <label>标签（逗号分隔）</label>
@@ -2338,8 +2324,6 @@ async function openEditModal(id) {
   const item = await api('GET', `/api/shares/${id}`);
   document.getElementById('editId').value = id;
   document.getElementById('editName').value = item.name || '';
-  document.getElementById('editPwd').value = item.pwd || '';
-  document.getElementById('editExpire').value = item.expire || '永久有效';
   document.getElementById('editTags').value = item.tags || '';
   document.getElementById('editNotes').value = item.notes || '';
   document.getElementById('editShareAccountName').value = item.account_name || '';
@@ -2350,8 +2334,6 @@ async function saveEdit() {
   const id = document.getElementById('editId').value;
   const data = {
     name: document.getElementById('editName').value,
-    pwd: document.getElementById('editPwd').value,
-    expire: document.getElementById('editExpire').value,
     tags: document.getElementById('editTags').value,
     notes: document.getElementById('editNotes').value,
     account_name: document.getElementById('editShareAccountName').value,
