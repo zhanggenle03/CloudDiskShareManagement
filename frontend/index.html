@@ -197,6 +197,12 @@
   .tag-pill.has-color:hover { filter: brightness(.92); }
   .tag-pill.active.has-color { box-shadow: inset 0 0 0 2px rgba(255,255,255,.5); filter: brightness(.85); }
   .tag-pill.active.no-color { background: var(--primary); color: #fff; }
+  /* 文件夹视图标签：左侧竖线风格，与分享标签区分 */
+  .tag-pill-folder { border-radius: 6px; border-left: 3px solid transparent; }
+  .tag-pill-folder.no-color { border-left-color: var(--gray-300); }
+  .tag-pill-folder.has-color { border-left-color: currentColor; }
+  .tag-pill-folder.active.has-color { box-shadow: inset 0 0 0 2px rgba(255,255,255,.5); filter: brightness(.85); }
+  .tag-pill-folder.active.no-color { background: var(--primary); color: #fff; border-left-color: var(--primary); }
 
   /* Tag colors on cards/rows */
   .tag { padding: 2px 8px; border-radius: 20px; font-size: 11px;
@@ -1440,7 +1446,7 @@ async function getSetting(key, defaultVal) {
 let state = {
   source: 'all', expire: '', keyword: '', tag: '', sort: 'share_time', order: 'desc',
   page: 1, pageSize: 20, total: 0, selected: new Set(), showImport: false, viewMode: 'card',
-  tagColors: {}, theme: 'light'
+  tagColors: {}, theme: 'light', resourceTag: ''
 };
 let searchTimer = null;
 
@@ -1990,6 +1996,15 @@ async function setView(mode) {
   state.viewMode = mode;
   await saveSetting('viewMode', mode);
 
+  // 切换视图时清除对应的标签筛选
+  if (mode === 'folder') {
+    state.tag = '';
+    document.querySelectorAll('.tag-pill').forEach(e => e.classList.remove('active'));
+  } else {
+    state.resourceTag = '';
+    document.querySelectorAll('.tag-pill-folder').forEach(e => e.classList.remove('active'));
+  }
+
   // 更新视图Tab按钮状态
   document.getElementById('viewCard').classList.toggle('active', mode === 'card');
   document.getElementById('viewList').classList.toggle('active', mode === 'list');
@@ -2084,6 +2099,7 @@ async function setView(mode) {
     }
     
     loadShares();
+    loadStats();  // 刷新侧边栏标签为分享级统计
   }
 }
 
@@ -2157,9 +2173,68 @@ function setTagFilter(tag, el) {
   loadShares();
 }
 
+// 文件夹视图标签筛选
+function setFolderTagFilter(tag, el) {
+  if (state.resourceTag === tag) {
+    state.resourceTag = '';
+    document.querySelectorAll('.tag-pill-folder').forEach(e => e.classList.remove('active'));
+  } else {
+    state.resourceTag = tag;
+    document.querySelectorAll('.tag-pill-folder').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+  }
+  loadResourceView();
+}
+
 // ── Stats ─────────────────────────────────────────────────
 async function loadStats() {
-  const s = await api('GET', '/api/stats');
+  // 先用分享级统计更新左上角数字（所有视图一致）
+  const shareStats = await api('GET', '/api/stats');
+  document.getElementById('statTotal').textContent = shareStats.total || 0;
+  document.getElementById('statPermanent').textContent = shareStats.permanent || 0;
+  document.getElementById('statExpiring').textContent = shareStats.expiring || 0;
+  document.getElementById('statExpired').textContent = shareStats.expired || 0;
+  document.getElementById('navAll').textContent = shareStats.total || 0;
+  document.getElementById('navBaidu').textContent = shareStats.baidu_count || 0;
+  document.getElementById('navQuark').textContent = shareStats.quark_count || 0;
+  document.getElementById('navUc').textContent = shareStats.uc_count || 0;
+
+  // 更新标签颜色缓存（所有视图共享）
+  if (shareStats.tags) {
+    const colorMap = {};
+    for (const [tag, info] of Object.entries(shareStats.tags)) {
+      colorMap[tag] = info.color || '';
+    }
+    state.tagColors = colorMap;
+  }
+
+  // 文件夹视图：左下角标签使用独立的资源级统计
+  if (state.viewMode === 'folder') {
+    const resStats = await api('GET', '/api/resource-stats');
+    const tagsEl = document.getElementById('tagsList');
+    if (resStats.tags && Object.keys(resStats.tags).length > 0) {
+      tagsEl.innerHTML = Object.entries(resStats.tags)
+        .sort((a,b) => b[1].count - a[1].count)
+        .map(([tag, info]) => {
+          const isActive = state.resourceTag === tag;
+          const color = info.color;
+          const hasColor = color ? 'has-color' : 'no-color';
+          const dotHtml = color ? `<span class="dot" style="background:${color}"></span>` : '';
+          const bgStyle = color ? (isActive ? `background:${color};color:#fff;` : `background:${color}15;color:${color};`) : '';
+          return `<span class="tag-pill tag-pill-folder ${hasColor} ${isActive ? 'active' : ''}" style="${bgStyle}"
+                        onclick="setFolderTagFilter('${escHtml(tag)}', this)"
+                        oncontextmenu="showTagContextMenu(event, '${escHtml(tag)}')">
+            ${dotHtml}${escHtml(tag)}<span style="opacity:.6">${info.count}个文件夹</span>
+          </span>`;
+        }).join('');
+    } else {
+      tagsEl.innerHTML = '<span style="color:var(--gray-400);font-size:12px;padding:4px 10px;">暂无标签</span>';
+    }
+    return;
+  }
+
+  // 非文件夹视图：左下角标签用分享级统计
+  const s = shareStats;
   document.getElementById('statTotal').textContent = s.total || 0;
   document.getElementById('statPermanent').textContent = s.permanent || 0;
   document.getElementById('statExpiring').textContent = s.expiring || 0;
@@ -4558,11 +4633,18 @@ async function loadResourceView() {
       page_size: state.pageSize || 50,
       keyword: state.keyword || ''
     });
+    if (state.resourceTag) {
+      params.set('tag', state.resourceTag);
+    }
     const res = await api('GET', `/api/resources?${params}`);
     resourceState.resources = res.data || [];
     // 更新左上角显示资源数量
     document.getElementById('resultInfo').textContent = `${resourceState.resources.length} 个资源`;
     renderResourceList();
+    // 刷新侧边栏标签状态（保持高亮）
+    if (state.viewMode === 'folder') {
+      await loadStats();
+    }
   } catch (e) {
     listEl.innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger);">加载失败</div>';
   }
@@ -4604,6 +4686,23 @@ function renderResourceItem(resource) {
     const name = p === 'baidu' ? '百度网盘' : (p === 'uc' ? 'UC网盘' : '夸克网盘');
     platformTagsHtml += `<span class="res-platform-tag ${cls}">${name}</span>`;
   });
+
+  // 收集关联分享上的标签，追加到平台标签后面
+  const shareTags = new Set();
+  for (const s of (resource.shares || [])) {
+    if (s.tags) {
+      s.tags.split(',').map(t => t.trim()).filter(t => t).forEach(t => shareTags.add(t));
+    }
+  }
+  if (shareTags.size > 0) {
+    if (platformTagsHtml) {
+      platformTagsHtml += `<span class="res-tag-sep"></span>`;
+    }
+    shareTags.forEach(tag => {
+      const { cls, style } = getTagStyle(tag);
+      platformTagsHtml += `<span class="res-share-tag ${cls}" style="${style}">${escHtml(tag)}</span>`;
+    });
+  }
 
   // 关联分享列表（抽屉内容）
   let drawerContent = '';
@@ -5318,6 +5417,9 @@ init();
   .res-platform-tag.baidu { background: rgba(36,104,242,.12); color: var(--baidu); }
   .res-platform-tag.quark { background: rgba(139,92,246,.12); color: var(--quark); }
   .res-platform-tag.uc { background: rgba(249,115,22,.12); color: var(--uc); }
+  .res-tag-sep { display: inline-block; width: 1px; height: 14px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+  .res-share-tag { padding: 2px 8px; border-radius: 20px; font-size: 11px; white-space: nowrap; }
+  .res-share-tag.no-color { background: var(--gray-100); color: var(--gray-600); }
   .resource-arrow { color: var(--gray-400); font-size: 12px; transition: transform .2s; flex-shrink: 0; }
   .resource-item.expanded .resource-arrow { transform: rotate(90deg); }
 

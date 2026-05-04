@@ -27,6 +27,7 @@ from database import (
     init_db, upsert_share, get_shares, update_share,
     delete_share, batch_delete, get_stats, log_import, get_import_logs, clear_import_logs,
     get_all_tag_colors, set_tag_color, delete_tag_color, get_stats_with_colors,
+    get_resource_stats,
     get_setting, set_setting, get_all_settings,
     add_account, get_accounts, get_account, update_account, delete_account,
     add_resource, get_resources, get_resource, update_resource, delete_resource,
@@ -347,6 +348,12 @@ def cancel_shares():
 @app.route('/api/stats', methods=['GET'])
 def stats():
     return jsonify(get_stats_with_colors())
+
+
+@app.route('/api/resource-stats', methods=['GET'])
+def resource_stats():
+    """获取资源级标签统计"""
+    return jsonify(get_resource_stats())
 
 # ─── 导入日志 ────────────────────────────────────────────────
 @app.route('/api/import_logs', methods=['GET'])
@@ -1009,11 +1016,12 @@ def test_cookie():
 def list_resources():
     """获取所有资源列表"""
     keyword = request.args.get('keyword', '')
+    tag = request.args.get('tag', '')
     sort = request.args.get('sort', 'updated_at')
     order = request.args.get('order', 'desc')
     page = request.args.get('page', 1, type=int)
     page_size = request.args.get('page_size', 50, type=int)
-    resources = get_resources(keyword, sort, order, page, page_size)
+    resources = get_resources(keyword, sort, order, page, page_size, tag)
     return jsonify(resources)
 
 

@@ -377,6 +377,37 @@ def get_stats():
     return row
 
 
+def get_resource_stats():
+    """获取资源级标签统计：每个标签关联了多少个不同的资源/文件夹，含颜色"""
+    conn = get_conn()
+    c = conn.cursor()
+    # 统计每个标签关联的不同资源数
+    c.execute("""
+        SELECT s.tags, rs.resource_id
+        FROM resource_shares rs
+        JOIN shares s ON rs.share_id = s.id AND s.is_deleted = 0
+        WHERE s.tags != ''
+    """)
+    tag_resources = {}
+    for r in c.fetchall():
+        tags = [t.strip() for t in r['tags'].split(',') if t.strip()]
+        rid = r['resource_id']
+        for tag in tags:
+            if tag not in tag_resources:
+                tag_resources[tag] = set()
+            tag_resources[tag].add(rid)
+    # 统计资源总数
+    c.execute("SELECT COUNT(*) FROM resources")
+    total_resources = c.fetchone()[0]
+    conn.close()
+    # 格式化为与 get_stats_with_colors 一致的输出
+    colors = get_all_tag_colors()
+    tags = {}
+    for tag, rids in tag_resources.items():
+        tags[tag] = {'count': len(rids), 'color': colors.get(tag, '')}
+    return {'total': total_resources, 'tags': tags}
+
+
 def log_import(filename, source, total, imported, skipped):
     conn = get_conn()
     conn.execute(
@@ -605,8 +636,8 @@ def add_resource(name: str, notes: str = '') -> dict:
 
 
 def get_resources(keyword: str = '', sort: str = 'updated_at', order: str = 'desc',
-                  page: int = 1, page_size: int = 50) -> list:
-    """获取所有资源列表（含关联分享），支持排序和分页"""
+                  page: int = 1, page_size: int = 50, tag: str = '') -> list:
+    """获取所有资源列表（含关联分享），支持排序、分页和标签筛选"""
     conn = get_conn()
     c = conn.cursor()
     
@@ -615,9 +646,26 @@ def get_resources(keyword: str = '', sort: str = 'updated_at', order: str = 'des
     sort_field = sort_field_map.get(sort, 'updated_at')
     order = 'ASC' if order == 'asc' else 'DESC'
     
+    # 标签筛选：找到关联分享包含该标签的资源ID
+    tag_subquery = ''
+    tag_params = ()
+    if tag:
+        tag_subquery = """
+            AND r.id IN (
+                SELECT DISTINCT rs.resource_id
+                FROM resource_shares rs
+                JOIN shares s ON rs.share_id = s.id AND s.is_deleted = 0
+                WHERE s.tags LIKE ?
+            )
+        """
+        tag_params = (f'%{tag}%',)
+    
     # 先获取总数
     if keyword:
-        c.execute("SELECT COUNT(*) FROM resources WHERE name LIKE ?", (f'%{keyword}%',))
+        c.execute(f"SELECT COUNT(*) FROM resources r WHERE r.name LIKE ?{tag_subquery}",
+                   (f'%{keyword}%',) + tag_params)
+    elif tag:
+        c.execute(f"SELECT COUNT(*) FROM resources r WHERE 1=1{tag_subquery}", tag_params)
     else:
         c.execute("SELECT COUNT(*) FROM resources")
     total = c.fetchone()[0]
@@ -625,10 +673,13 @@ def get_resources(keyword: str = '', sort: str = 'updated_at', order: str = 'des
     # 分页
     offset = (page - 1) * page_size
     if keyword:
-        c.execute(f"SELECT * FROM resources WHERE name LIKE ? ORDER BY {sort_field} {order} LIMIT ? OFFSET ?",
-                   (f'%{keyword}%', page_size, offset))
+        c.execute(f"SELECT r.* FROM resources r WHERE r.name LIKE ?{tag_subquery} ORDER BY r.{sort_field} {order} LIMIT ? OFFSET ?",
+                   (f'%{keyword}%',) + tag_params + (page_size, offset))
+    elif tag:
+        c.execute(f"SELECT r.* FROM resources r WHERE 1=1{tag_subquery} ORDER BY r.{sort_field} {order} LIMIT ? OFFSET ?",
+                   tag_params + (page_size, offset))
     else:
-        c.execute(f"SELECT * FROM resources ORDER BY {sort_field} {order} LIMIT ? OFFSET ?",
+        c.execute(f"SELECT r.* FROM resources r ORDER BY r.{sort_field} {order} LIMIT ? OFFSET ?",
                    (page_size, offset))
     rows = [dict(r) for r in c.fetchall()]
     
