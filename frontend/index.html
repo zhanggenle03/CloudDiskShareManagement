@@ -387,22 +387,21 @@
   .table-view .td-url .copy-btn { flex-shrink: 0; }
   .table-view .td-meta { white-space: nowrap; text-align: center; overflow: hidden; text-overflow: ellipsis; }
   .table-view .td-time { min-width: 148px; overflow: visible; text-overflow: unset; white-space: nowrap; }
-  .table-view .td-tags { text-align: center; overflow: visible; padding: 6px 0; position: relative; }
-  .tags-wrap { display: flex; align-items: center; width: 100%;
+  .table-view .td-tags { display: flex; align-items: center; overflow: visible; padding: 6px 0; gap: 3px; }
+  .tags-wrap { display: flex; align-items: center; flex: 1; min-width: 0;
                overflow-x: auto; overflow-y: hidden;
                scrollbar-width: none; /* Firefox 隐藏滚动条 */
                -ms-overflow-style: none; /* IE/Edge */
                padding-bottom: 3px; scroll-behavior: auto; }
   .tags-wrap::-webkit-scrollbar { display: none; /* Chrome/Safari 隐藏滚动条 */ }
-  .tags-wrap-inner { display: flex; gap: 4px; white-space: nowrap; margin: auto; user-select: none; }
-  .tags-scroll-btn { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
-                    width: 16px; height: 20px; border: none; border-radius: 4px; cursor: pointer;
-                    display: none; align-items: center; justify-content: center; font-size: 10px;
-                    background: var(--bg-card); color: var(--gray-500); box-shadow: 0 1px 4px rgba(0,0,0,.12);
+  .tags-wrap-inner { display: flex; gap: 4px; white-space: nowrap; margin: 0 auto; user-select: none; }
+  .tags-scroll-btn { flex-shrink: 0;
+                    width: 14px; height: 18px; border: none; border-radius: 3px; cursor: pointer;
+                    display: none; align-items: center; justify-content: center; font-size: 11px;
+                    background: var(--bg-card); color: var(--gray-500); box-shadow: 0 1px 3px rgba(0,0,0,.1);
                     padding: 0; line-height: 1; }
   .tags-scroll-btn:hover { background: var(--gray-100); color: var(--gray-700); }
-  .tags-scroll-btn.btn-l { left: 0; }
-  .tags-scroll-btn.btn-r { right: 0; }
+  .tags-scroll-group { display: flex; align-items: center; gap: 1px; flex-shrink: 0; }
   .table-view .td-notes { text-align: center; }
   .table-view .td-notes .note-icon { font-size: 15px; cursor: default; display: inline-block; line-height: 1; }
   .table-view .td-actions { white-space: nowrap; text-align: center; position: relative; }
@@ -741,7 +740,7 @@
               <th class="th-center" style="width:90px">提取码</th>
               <th class="th-center" style="width:90px">有效期</th>
               <th class="th-center" style="width:148px;min-width:148px">分享时间</th>
-              <th class="th-center" style="width:100px">标签</th>
+              <th class="th-center" style="width:140px">标签</th>
               <th class="th-center" style="width:40px">备注</th>
               <th class="th-center" style="width:44px">操作</th>
             </tr>
@@ -1710,13 +1709,15 @@ function renderTableRow(item) {
   const tagList = item.tags ? item.tags.split(',').filter(t => t.trim()) : [];
   let tagsHtml;
   if (tagList.length === 0) {
-    tagsHtml = '<span style="color:var(--gray-400)">—</span>';
+    tagsHtml = '<span style="color:var(--gray-400);display:block;text-align:center;width:100%">—</span>';
   } else {
     const allTags = tagList.map(t => getTagHtml(t.trim(), item.id)).join('');
     const uid = 'tw-' + item.id;
     tagsHtml = `<div class="tags-wrap" id="${uid}" onscroll="onTagsScroll('${uid}')"><div class="tags-wrap-inner">${allTags}</div></div>`
+      + `<div class="tags-scroll-group" id="sg-${uid}">`
       + `<button class="tags-scroll-btn btn-l" style="display:none" onmousedown="startTagsSlide('${uid}',-1)" onmouseup="stopTagsSlide()" onmouseleave="stopTagsSlide()" ontouchstart="startTagsSlide('${uid}',-1)" ontouchend="stopTagsSlide()">‹</button>`
-      + `<button class="tags-scroll-btn btn-r" style="display:none" onmousedown="startTagsSlide('${uid}',1)" onmouseup="stopTagsSlide()" onmouseleave="stopTagsSlide()" ontouchstart="startTagsSlide('${uid}',1)" ontouchend="stopTagsSlide()">›</button>`;
+      + `<button class="tags-scroll-btn btn-r" style="display:none" onmousedown="startTagsSlide('${uid}',1)" onmouseup="stopTagsSlide()" onmouseleave="stopTagsSlide()" ontouchstart="startTagsSlide('${uid}',1)" ontouchend="stopTagsSlide()">›</button>`
+      + `</div>`;
   }
 
   const pwdHtml = item.pwd
@@ -2790,7 +2791,7 @@ async function doBatchTag() {
 // ── Tags slide buttons ──────────────────────────────────
 let tagsSlideTimer = null;
 
-// 检查标签容器滚动状态，显示/隐藏左右按钮
+// 检查标签容器滚动状态，显示/隐藏左右按钮（同时显示/隐藏）
 function onTagsScroll(uid) {
   const wrap = document.getElementById(uid);
   if (!wrap) return;
@@ -2798,10 +2799,9 @@ function onTagsScroll(uid) {
   const btnL = td.querySelector('.btn-l');
   const btnR = td.querySelector('.btn-r');
   if (!btnL || !btnR) return;
-  const showL = wrap.scrollLeft > 2;
-  const showR = wrap.scrollLeft < wrap.scrollWidth - wrap.clientWidth - 2;
-  btnL.style.display = showL ? 'flex' : 'none';
-  btnR.style.display = showR ? 'flex' : 'none';
+  const hasOverflow = wrap.scrollWidth > wrap.clientWidth + 2;
+  btnL.style.display = hasOverflow ? 'flex' : 'none';
+  btnR.style.display = hasOverflow ? 'flex' : 'none';
 }
 
 // 初始化标签按钮可见性（渲染后调用）
@@ -2809,17 +2809,7 @@ function initTagsButtons() {
   document.querySelectorAll('.tags-wrap').forEach(wrap => {
     const uid = wrap.id;
     if (!uid) return;
-    const td = wrap.parentElement;
-    const btnL = td.querySelector('.btn-l');
-    const btnR = td.querySelector('.btn-r');
-    if (!btnL || !btnR) return;
-    // 仅内容溢出时显示按钮
-    if (wrap.scrollWidth > wrap.clientWidth + 2) {
-      btnR.style.display = 'flex';
-    } else {
-      btnL.style.display = 'none';
-      btnR.style.display = 'none';
-    }
+    onTagsScroll(uid);
   });
 }
 
