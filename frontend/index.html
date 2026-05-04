@@ -779,8 +779,15 @@
       <input type="text" id="editName" readonly>
     </div>
     <div class="form-group">
-      <label>标签（逗号分隔）</label>
-      <input type="text" id="editTags" placeholder="例：音乐, 电影, 资料">
+      <label>标签</label>
+      <div class="tag-input-container">
+        <div class="tag-chips" id="editTagChips"></div>
+        <div class="tag-input-wrap">
+          <input type="text" class="tag-text-input" id="editTagInput" placeholder="输入标签后按回车添加" autocomplete="off"
+                 oninput="onEditTagTyping()" onkeydown="onEditTagKeydown(event)" onfocus="onEditTagFocus()" onblur="onEditTagBlur()">
+          <div class="tag-suggestions" id="editTagSuggestions" style="display:none;"></div>
+        </div>
+      </div>
     </div>
     <div class="form-group">
       <label>备注</label>
@@ -801,9 +808,10 @@
 <div class="modal-overlay" id="batchTagModal">
   <div class="modal">
     <h3>🏷️ 批量添加标签</h3>
-    <div class="form-group">
+    <div class="form-group" style="position:relative;">
       <label>标签名称</label>
-      <input type="text" id="batchTagInput" placeholder="输入标签名" oninput="onBatchTagInput()">
+      <input type="text" id="batchTagInput" placeholder="输入标签名" autocomplete="off" oninput="onBatchTagInput()" onfocus="onBatchTagFocus()" onblur="onBatchTagBlur()">
+      <div class="tag-suggestions" id="batchTagSuggestions" style="display:none;"></div>
     </div>
     <div class="form-group" id="batchTagColorGroup" style="display:none;">
       <label>标签颜色</label>
@@ -1449,6 +1457,7 @@ let state = {
   tagColors: {}, theme: 'light', resourceTag: ''
 };
 let searchTimer = null;
+let _editTags = []; // 编辑弹窗中的标签 chip 数组
 
 // ── 预设颜色 ─────────────────────────────────────────────
 const PRESET_COLORS = [
@@ -2395,12 +2404,111 @@ async function doImportFiles() {
   }
 }
 
+// ── Edit Tag Chip Input ───────────────────────────────────
+
+function renderEditTagChips() {
+  const container = document.getElementById('editTagChips');
+  if (!container) return;
+  container.innerHTML = _editTags.map(t => {
+    const color = state.tagColors[t] || '';
+    const safeT = escHtml(t);
+    if (color) {
+      return `<span class="tag-chip" style="background:${color}18;color:${color};border:1px solid ${color}30;">${safeT}<span class="tag-chip-del" onclick="removeEditTag('${safeT}')">×</span></span>`;
+    }
+    return `<span class="tag-chip">${safeT}<span class="tag-chip-del" onclick="removeEditTag('${safeT}')">×</span></span>`;
+  }).join('');
+}
+
+function removeEditTag(tag) {
+  _editTags = _editTags.filter(t => t !== tag);
+  renderEditTagChips();
+  document.getElementById('editTagInput').focus();
+}
+
+function onEditTagKeydown(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const input = document.getElementById('editTagInput');
+    const tag = input.value.trim();
+    if (tag && !_editTags.includes(tag)) {
+      _editTags.push(tag);
+      renderEditTagChips();
+      input.value = '';
+    }
+    hideEditTagSuggestions();
+  } else if (e.key === 'Backspace' && !e.target.value) {
+    _editTags.pop();
+    renderEditTagChips();
+  }
+}
+
+function onEditTagTyping() {
+  const input = document.getElementById('editTagInput');
+  const val = input.value.trim();
+  const suggestions = document.getElementById('editTagSuggestions');
+  const allTags = Object.keys(state.tagColors);
+  // 没输入时展示所有标签，输入时过滤
+  const matched = val
+    ? allTags.filter(t => t.includes(val) && !_editTags.includes(t))
+    : allTags.filter(t => !_editTags.includes(t));
+  if (matched.length > 0) {
+    suggestions.innerHTML = matched.map(t =>
+      `<div class="tag-suggestion-item" onmousedown="selectEditTagSuggestion('${escHtml(t)}')">${escHtml(t)}</div>`
+    ).join('');
+    suggestions.style.display = 'block';
+  } else {
+    suggestions.style.display = 'none';
+    suggestions.innerHTML = '';
+  }
+}
+
+function onEditTagFocus() {
+  onEditTagTyping();
+}
+
+function onEditTagBlur() {
+  // 延迟隐藏，让 mousedown 选择建议先触发
+  setTimeout(() => {
+    const el = document.getElementById('editTagSuggestions');
+    if (el) el.style.display = 'none';
+  }, 200);
+}
+
+function selectEditTagSuggestion(tag) {
+  if (!_editTags.includes(tag)) {
+    _editTags.push(tag);
+    renderEditTagChips();
+  }
+  document.getElementById('editTagInput').value = '';
+  document.getElementById('editTagSuggestions').style.display = 'none';
+  document.getElementById('editTagInput').focus();
+}
+
+function hideEditTagSuggestions() {
+  const s = document.getElementById('editTagSuggestions');
+  if (s) { s.style.display = 'none'; s.innerHTML = ''; }
+}
+
+// ── Batch Tag Suggestion ──────────────────────────────────
+function onBatchTagFocus() {
+  onBatchTagInput();
+}
+
+function onBatchTagBlur() {
+  setTimeout(() => {
+    document.getElementById('batchTagSuggestions').style.display = 'none';
+  }, 150);
+}
+
 // ── Edit Modal ────────────────────────────────────────────
 async function openEditModal(id) {
   const item = await api('GET', `/api/shares/${id}`);
   document.getElementById('editId').value = id;
   document.getElementById('editName').value = item.name || '';
-  document.getElementById('editTags').value = item.tags || '';
+  _editTags = (item.tags || '').split(',').filter(t => t.trim());
+  renderEditTagChips();
+  document.getElementById('editTagInput').value = '';
+  hideEditTagSuggestions();
   document.getElementById('editNotes').value = item.notes || '';
   document.getElementById('editShareAccountName').value = item.account_name || '';
   document.getElementById('editModal').classList.add('show');
@@ -2410,7 +2518,7 @@ async function saveEdit() {
   const id = document.getElementById('editId').value;
   const data = {
     name: document.getElementById('editName').value,
-    tags: document.getElementById('editTags').value,
+    tags: _editTags.join(','),
     notes: document.getElementById('editNotes').value,
     account_name: document.getElementById('editShareAccountName').value,
   };
@@ -2812,6 +2920,21 @@ function onBatchTagInput() {
   const tagName = document.getElementById('batchTagInput').value.trim();
   const colorGroup = document.getElementById('batchTagColorGroup');
   const colorGrid = document.getElementById('batchTagColors');
+  const suggestions = document.getElementById('batchTagSuggestions');
+
+  // 显示已有标签建议（无输入时展示全部，有输入时过滤）
+  const allTags = Object.keys(state.tagColors);
+  const matched = tagName
+    ? allTags.filter(t => t.includes(tagName))
+    : allTags;
+  if (matched.length > 0) {
+    suggestions.innerHTML = matched.map(t =>
+      `<div class="tag-suggestion-item" onmousedown="selectBatchTagSuggestion('${escHtml(t)}')">${escHtml(t)}</div>`
+    ).join('');
+    suggestions.style.display = 'block';
+  } else {
+    suggestions.style.display = 'none';
+  }
 
   if (!tagName) {
     colorGroup.style.display = 'none';
@@ -2826,6 +2949,23 @@ function onBatchTagInput() {
           style="background:${c}" onclick="selectBatchTagColor('${c}', this)"></div>`
   ).join('');
 
+  if (existingColor && !batchTagSelectedColor) {
+    batchTagSelectedColor = existingColor;
+    document.getElementById('batchTagCustomColor').value = existingColor;
+  }
+}
+
+function selectBatchTagSuggestion(tag) {
+  document.getElementById('batchTagInput').value = tag;
+  document.getElementById('batchTagSuggestions').style.display = 'none';
+  // 直接更新颜色选择器，不复用 onBatchTagInput（避免重新显示建议）
+  const colorGroup = document.getElementById('batchTagColorGroup');
+  colorGroup.style.display = 'block';
+  const existingColor = state.tagColors[tag] || '';
+  document.getElementById('batchTagColors').innerHTML = PRESET_COLORS.map(c =>
+    `<div class="color-swatch ${c === (batchTagSelectedColor || existingColor) ? 'selected' : ''}"
+          style="background:${c}" onclick="selectBatchTagColor('${c}', this)"></div>`
+  ).join('');
   if (existingColor && !batchTagSelectedColor) {
     batchTagSelectedColor = existingColor;
     document.getElementById('batchTagCustomColor').value = existingColor;
@@ -5624,6 +5764,22 @@ init();
   .view-tab-btn:hover { color: var(--gray-600); background: var(--gray-50); }
   .view-tab-btn.active { background: var(--primary); color: #fff; }
   .view-tab-btn + .view-tab-btn { border-left: 1px solid var(--gray-200); }
+
+  /* ── Tag Chip Input ───────────────────────────────────── */
+  .tag-input-container { display: flex; flex-direction: column; gap: 6px; }
+  .tag-chips { display: flex; flex-wrap: wrap; gap: 4px; min-height: 28px; }
+  .tag-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 20px; font-size: 12px; background: var(--gray-100); color: var(--gray-700); line-height: 1.6; }
+  .tag-chip .tag-chip-del { cursor: pointer; font-size: 14px; line-height: 1; opacity: .5; transition: opacity .15s; margin-left: 2px; }
+  .tag-chip .tag-chip-del:hover { opacity: 1; color: var(--danger); }
+  .tag-input-wrap { position: relative; }
+  .tag-text-input { width: 100%; padding: 6px 10px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 13px; background: var(--bg); color: var(--text-primary); outline: none; box-sizing: border-box; }
+  .tag-text-input:focus { border-color: var(--primary); }
+  .tag-suggestions { position: absolute; top: 100%; left: 0; right: 0; max-height: 160px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--gray-200); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.1); z-index: 1000; margin-top: 2px; }
+  .tag-suggestion-item { padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--text-primary); transition: background .1s; }
+  .tag-suggestion-item:hover { background: var(--gray-100); }
+  .tag-suggestion-item:first-child { border-radius: 6px 6px 0 0; }
+  .tag-suggestion-item:last-child { border-radius: 0 0 6px 6px; }
+  .tag-suggestion-item:only-child { border-radius: 6px; }
 </style>
 <script>
   const stb = document.getElementById('scrollTopBtn');
