@@ -474,6 +474,10 @@ def get_stats_with_colors():
     colored_tags = {}
     for tag, count in stats['tags'].items():
         colored_tags[tag] = {'count': count, 'color': colors.get(tag, '')}
+    # 包含 tag_colors 中已存在但尚未用到分享上的标签（count=0）
+    for tag in colors:
+        if tag not in colored_tags:
+            colored_tags[tag] = {'count': 0, 'color': colors.get(tag, '')}
     stats['tags'] = colored_tags
     return stats
 

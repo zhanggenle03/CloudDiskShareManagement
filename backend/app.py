@@ -47,7 +47,11 @@ log = setup_logger('app')
 # ─── 静态前端 ────────────────────────────────────────────────
 @app.route('/')
 def index():
-    return send_from_directory(FRONTEND_DIR, 'index.html')
+    resp = send_from_directory(FRONTEND_DIR, 'index.html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 # ─── 导入 CSV ────────────────────────────────────────────────
 @app.route('/api/import', methods=['POST'])
@@ -414,6 +418,24 @@ def update_tag_color():
 def remove_tag_color(tag_name):
     delete_tag_color(tag_name)
     return jsonify({'success': True})
+
+# ─── 创建标签 ────────────────────────────────────────────────
+@app.route('/api/tags', methods=['POST'])
+def create_tag():
+    """创建一个新标签（写入 tag_colors），立即在侧边栏显示"""
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({'error': '标签名不能为空'}), 400
+    # 如果传了颜色则设置，否则留空
+    color = data.get('color', '').strip()
+    if color:
+        set_tag_color(name, color)
+    else:
+        # 写入一个空颜色占位，让标签出现在 tag_colors 中
+        set_tag_color(name, '')
+    log.info(f'创建标签: {name}')
+    return jsonify({'success': True, 'name': name, 'color': color})
 
 # ─── 删除某个标签（从所有记录中移除 + 删除颜色配置） ───────
 @app.route('/api/tags/<path:tag_name>', methods=['DELETE'])

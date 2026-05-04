@@ -81,6 +81,9 @@
   .nav-section { padding: 12px 10px 4px; }
   .nav-label { font-size: 11px; color: var(--gray-400); text-transform: uppercase;
                letter-spacing: .6px; padding: 0 10px 6px; font-weight: 600; }
+  .add-tag-btn { cursor: pointer; font-size: 14px; color: var(--gray-400); transition: color .15s; user-select: none; line-height: 1; }
+  .add-tag-btn:hover { color: var(--primary); }
+  body[data-view="folder"] .add-tag-btn { display: none; }
   .nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
               border-radius: 8px; cursor: pointer; color: var(--gray-600);
               font-size: 13.5px; transition: all .15s; }
@@ -637,7 +640,10 @@
     </div>
 
     <div class="nav-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
-      <div class="nav-label">标签</div>
+      <div class="nav-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:10px;">
+        <span>标签</span>
+        <span class="add-tag-btn" id="addTagBtn" onclick="showAddTagModal()" title="新建标签">＋</span>
+      </div>
       <div class="tags-section" id="tagsList">
         <span style="color:var(--gray-400);font-size:12px;padding:4px 10px;">暂无标签</span>
       </div>
@@ -824,6 +830,29 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('batchTagModal')">取消</button>
       <button class="btn btn-primary" onclick="doBatchTag()">确认添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Tag Modal -->
+<div class="modal-overlay" id="addTagModal">
+  <div class="modal" style="max-width:360px;">
+    <h3>🏷️ 新建标签</h3>
+    <div class="form-group">
+      <label>标签名称</label>
+      <input type="text" id="addTagName" placeholder="输入标签名称" autocomplete="off" maxlength="20" onkeydown="if(event.key==='Enter')doAddTag()">
+    </div>
+    <div class="form-group">
+      <label>标签颜色 <span style="color:var(--gray-400);font-size:11px;">（可选）</span></label>
+      <div class="color-picker-grid" id="addTagColors"></div>
+      <div class="color-custom-row">
+        <input type="color" id="addTagCustomColor" value="#4F6EF7" oninput="onAddTagCustomColor(this)">
+        <label>自定义颜色</label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('addTagModal')">取消</button>
+      <button class="btn btn-primary" onclick="doAddTag()">创建</button>
     </div>
   </div>
 </div>
@@ -2003,6 +2032,7 @@ async function setView(mode) {
     return;
   }
   state.viewMode = mode;
+  document.body.dataset.view = mode;
   await saveSetting('viewMode', mode);
 
   // 切换视图时清除对应的标签筛选
@@ -2071,6 +2101,10 @@ async function setView(mode) {
     // 禁用平台和有效期筛选按钮
     disableFiltersForFolder();
 
+    // 文件夹视图隐藏新建标签按钮
+    const addTagBtn = document.getElementById('addTagBtn');
+    if (addTagBtn) addTagBtn.style.display = 'none';
+
     // 再切换视图容器
     cardsGrid.classList.add('hidden');
     tableView.classList.add('hidden');
@@ -2094,6 +2128,10 @@ async function setView(mode) {
 
     // 恢复筛选按钮
     enableFiltersForFolder();
+
+    // 非文件夹视图显示新建标签按钮
+    const addTagBtn = document.getElementById('addTagBtn');
+    if (addTagBtn) addTagBtn.style.display = '';
 
     // 再切换视图容器
     resourceView.classList.remove('active');
@@ -2231,8 +2269,7 @@ async function loadStats() {
           const dotHtml = color ? `<span class="dot" style="background:${color}"></span>` : '';
           const bgStyle = color ? (isActive ? `background:${color};color:#fff;` : `background:${color}15;color:${color};`) : '';
           return `<span class="tag-pill tag-pill-folder ${hasColor} ${isActive ? 'active' : ''}" style="${bgStyle}"
-                        onclick="setFolderTagFilter('${escHtml(tag)}', this)"
-                        oncontextmenu="showTagContextMenu(event, '${escHtml(tag)}')">
+                        onclick="setFolderTagFilter('${escHtml(tag)}', this)">
             ${dotHtml}${escHtml(tag)}<span style="opacity:.6">${info.count}个文件夹</span>
           </span>`;
         }).join('');
@@ -2273,7 +2310,7 @@ async function loadStats() {
         const hasColor = color ? 'has-color' : 'no-color';
         const dotHtml = color ? `<span class="dot" style="background:${color}"></span>` : '';
         const bgStyle = color ? (isActive ? `background:${color};color:#fff;` : `background:${color}15;color:${color};`) : '';
-        return `<span class="tag-pill ${hasColor} ${isActive ? 'active' : ''}" style="${bgStyle}"
+        return `<span class="tag-pill tag-pill-folder ${hasColor} ${isActive ? 'active' : ''}" style="${bgStyle}"
                       onclick="setTagFilter('${escHtml(tag)}', this)"
                       oncontextmenu="showTagContextMenu(event, '${escHtml(tag)}')">
           ${dotHtml}${escHtml(tag)}<span style="opacity:.6">${info.count}</span>
@@ -2914,6 +2951,40 @@ function showBatchTagModal() {
   document.getElementById('batchTagColorGroup').style.display = 'none';
   document.getElementById('batchTagColors').innerHTML = '';
   document.getElementById('batchTagModal').classList.add('show');
+}
+
+// ── 新建标签（左下角 "+"） ────────────────────────────────
+function showAddTagModal() {
+  document.getElementById('addTagName').value = '';
+  addTagSelectedColor = '';
+  // 渲染颜色选择器
+  const grid = document.getElementById('addTagColors');
+  grid.innerHTML = PRESET_COLORS.map(c => `<div class="color-swatch" data-color="${c}" style="background:${c}" onclick="selectAddTagColor(this,'${c}')"></div>`).join('');
+  document.getElementById('addTagModal').classList.add('show');
+  // 自动聚焦
+  setTimeout(() => document.getElementById('addTagName').focus(), 100);
+}
+let addTagSelectedColor = '';
+function selectAddTagColor(el, color) {
+  document.querySelectorAll('#addTagColors .color-swatch').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  addTagSelectedColor = color;
+}
+function onAddTagCustomColor(el) {
+  addTagSelectedColor = el.value;
+  document.querySelectorAll('#addTagColors .color-swatch').forEach(e => e.classList.remove('selected'));
+}
+
+async function doAddTag() {
+  const name = document.getElementById('addTagName').value.trim();
+  if (!name) { toast('请输入标签名称', 'warning'); return; }
+  // 颜色：取选中的自定义颜色或已选色
+  const color = addTagSelectedColor || document.getElementById('addTagCustomColor').value;
+  const res = await api('POST', '/api/tags', { name, color });
+  if (res.error) { toast(res.error, 'error'); return; }
+  closeModal('addTagModal');
+  toast(`标签 "${name}" 已创建`, 'success');
+  loadStats();
 }
 
 function onBatchTagInput() {
@@ -5385,6 +5456,7 @@ async function init() {
   // 加载数据
   try {
     await restoreUI();
+    document.body.dataset.view = state.viewMode;
   } catch (e) {
     console.error('加载设置失败', e);
   }
@@ -5410,6 +5482,9 @@ async function init() {
       // 隐藏有效期筛选按钮（文件夹视图按资源名筛选，不按有效期）
       var filterAreaInit = document.querySelector('.filter-area, .filter-buttons');
       if (filterAreaInit) filterAreaInit.style.display = 'none';
+      // 文件夹视图隐藏新建标签按钮
+      var addTagBtnInit = document.getElementById('addTagBtn');
+      if (addTagBtnInit) addTagBtnInit.style.display = 'none';
       await loadResourceView();
     } else {
       await loadShares();
