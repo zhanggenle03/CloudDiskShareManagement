@@ -262,6 +262,7 @@ def upsert_share(share: dict) -> dict:
 
 
 def get_shares(source=None, expire_filter=None, keyword=None, tag=None,
+               account_ids=None,
                page=1, page_size=20, sort='share_time', order='desc'):
     conn = get_conn()
     c = conn.cursor()
@@ -291,6 +292,24 @@ def get_shares(source=None, expire_filter=None, keyword=None, tag=None,
     if tag:
         conditions.append("(',' || tags || ',') LIKE ?")
         params.append(f'%,{tag},%')
+
+    if account_ids:
+        # 通过 account_id 反查 account_name + platform(source)，解决同名账号问题
+        # 注意: shares.source 格式为 "platform:account_name"，需用 LIKE 匹配
+        placeholders = ','.join(['?'] * len(account_ids))
+        acc_cursor = conn.cursor()
+        acc_cursor.execute(f"SELECT name, platform FROM accounts WHERE id IN ({placeholders})", list(account_ids))
+        acc_pairs = [(row['name'], row['platform']) for row in acc_cursor.fetchall()]
+        if acc_pairs:
+            # 构建 (account_name=? AND source LIKE ?) OR ... 条件
+            pair_conditions = []
+            for name, platform in acc_pairs:
+                pair_conditions.append("(account_name = ? AND source LIKE ?)")
+                params.extend([name, f'{platform}%'])
+            conditions.append(f"({' OR '.join(pair_conditions)})")
+        else:
+            # 没有匹配的账号，返回空结果
+            conditions.append("1 = 0")
 
     where = " AND ".join(conditions)
 

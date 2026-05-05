@@ -107,12 +107,14 @@ def list_shares():
     expire_filter = request.args.get('expire', '')
     keyword = request.args.get('keyword', '')
     tag = request.args.get('tag', '')
+    account_ids_str = request.args.get('account_ids', '')
+    account_ids = json.loads(account_ids_str) if account_ids_str else None
     page = int(request.args.get('page', 1))
     page_size = int(request.args.get('page_size', 20))
     sort = request.args.get('sort', 'share_time')
     order = request.args.get('order', 'desc')
 
-    result = get_shares(source, expire_filter, keyword, tag, page, page_size, sort, order)
+    result = get_shares(source, expire_filter, keyword, tag, account_ids=account_ids, page=page, page_size=page_size, sort=sort, order=order)
     return jsonify(result)
 
 # ─── 单条详情 ────────────────────────────────────────────────

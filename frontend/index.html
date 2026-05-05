@@ -251,12 +251,21 @@
   .search-box input:focus { border-color: var(--primary); }
   .search-box .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
                               color: var(--gray-400); font-size: 15px; }
-  .filter-group { display: flex; gap: 6px; }
-  .filter-btn { padding: 7px 14px; border: 1.5px solid var(--border); border-radius: 8px;
+  .filter-group { display: flex; align-items: center; gap: 6px; }
+  .filter-label { font-size: 13px; color: var(--text-secondary); white-space: nowrap;
+                  line-height: 1; }
+  .filter-select { padding: 7px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+                    background: var(--bg-card); cursor: pointer; font-size: 13px; color: var(--text);
+                    transition: border-color .15s; outline: none; min-width: 88px; height: 34px; }
+  .filter-select:hover, .filter-select:focus { border-color: var(--primary); }
+  .filter-btn { padding: 7px 12px; border: 1.5px solid var(--border); border-radius: 8px;
                 background: var(--bg-card); cursor: pointer; font-size: 13px; color: var(--text-secondary);
-                transition: all .15s; white-space: nowrap; }
+                transition: all .15s; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
   .filter-btn:hover { border-color: var(--primary); color: var(--primary); }
   .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .filter-btn .badge { background: var(--primary); color: #fff; font-size: 10px; padding: 1px 5px;
+                       border-radius: 10px; font-weight: 600; }
+  .filter-btn.active .badge { background: rgba(255,255,255,.3); }
   .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer;
          font-size: 13px; font-weight: 500; transition: all .15s; display: inline-flex;
          align-items: center; gap: 6px; }
@@ -663,10 +672,16 @@
         </div>
 
         <div class="filter-group">
-          <button class="filter-btn active" data-expire="" onclick="setExpire('', this)">全部</button>
-          <button class="filter-btn" data-expire="permanent" onclick="setExpire('permanent', this)">永久</button>
-          <button class="filter-btn" data-expire="limited" onclick="setExpire('limited', this)">限时</button>
-          <button class="filter-btn" data-expire="expired" onclick="setExpire('expired', this)">已失效</button>
+          <span class="filter-label">有效期</span>
+          <select class="filter-select" id="expireFilter" onchange="setExpire(this.value)">
+            <option value="">全部</option>
+            <option value="permanent">永久</option>
+            <option value="limited">限时</option>
+            <option value="expired">已失效</option>
+          </select>
+          <button class="filter-btn" id="accountFilterBtn" onclick="showAccountFilterModal()" title="按账号筛选">
+            <span>👤</span><span id="accountFilterCount">账号</span>
+          </button>
         </div>
       </div>
 
@@ -952,6 +967,46 @@
   </div>
 </div>
 
+<!-- 账号筛选弹窗 -->
+<div class="modal-overlay" id="accountFilterModal">
+  <div class="modal" style="width:560px;height:420px;max-height:80vh;display:flex;flex-direction:column;">
+    <div class="modal-header" style="flex-shrink:0;">
+      <span>👤 按账号筛选分享</span>
+      <span class="modal-close" onclick="closeAccountFilterModal()">&times;</span>
+    </div>
+    <div style="display:flex;gap:14px;flex:1;min-height:0;padding:12px 0 0;">
+      <!-- 左侧：平台选择 -->
+      <div style="width:130px;flex-shrink:0;display:flex;flex-direction:column;">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;padding-left:4px;">选择网盘</div>
+        <div class="account-platform-list" id="accountFilterPlatformList">
+          <div class="account-platform-item active" data-platform="all" onclick="switchFilterPlatform('all', this)">
+            <span>🌐 全部</span>
+          </div>
+          <div class="account-platform-item" data-platform="quark" onclick="switchFilterPlatform('quark', this)">
+            <span>🟣 夸克网盘</span>
+          </div>
+          <div class="account-platform-item" data-platform="baidu" onclick="switchFilterPlatform('baidu', this)">
+            <span>🔵 百度网盘</span>
+          </div>
+          <div class="account-platform-item" data-platform="uc" onclick="switchFilterPlatform('uc', this)">
+            <span>🟠 UC网盘</span>
+          </div>
+        </div>
+      </div>
+      <!-- 右侧：账号列表 -->
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+        <div id="accountFilterList" style="flex:1;overflow-y:auto;border:1.5px solid var(--border);border-radius:8px;">
+          <div style="text-align:center;color:var(--gray-400);font-size:12px;padding:40px;">加载中...</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions" style="margin-top:10px;flex-shrink:0;">
+      <button class="btn btn-ghost" onclick="clearAccountFilter()">清除筛选</button>
+      <button class="btn btn-primary" onclick="closeAccountFilterModal()">确定</button>
+    </div>
+  </div>
+</div>
+
 <style>
 /* 平台按钮 */
 .sync-platform-item {
@@ -1120,6 +1175,43 @@
   color: var(--gray-400);
   font-size: 13px;
 }
+
+/* 账号筛选弹窗 */
+.account-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+  font-size: 13px;
+  color: var(--text);
+}
+.account-filter-item:hover {
+  background: var(--gray-50);
+}
+.account-filter-item.selected {
+  background: var(--primary-light);
+}
+.account-filter-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.account-filter-status {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.account-filter-status.valid { background: #ecfdf5; color: #059669; }
+.account-filter-status.invalid { background: #fef2f2; color: #dc2626; }
+.account-filter-status.unknown { background: var(--gray-100); color: var(--gray-500); }
 </style>
 
 <!-- General Settings Modal -->
@@ -1483,7 +1575,7 @@ async function getSetting(key, defaultVal) {
 }
 
 let state = {
-  source: 'all', expire: '', keyword: '', tag: '', sort: 'share_time', order: 'desc',
+  source: 'all', expire: '', accountFilter: [], keyword: '', tag: '', sort: 'share_time', order: 'desc',
   page: 1, pageSize: 20, total: 0, selected: new Set(), showImport: false, viewMode: 'card',
   tagColors: {}, theme: 'light', resourceTag: ''
 };
@@ -1609,6 +1701,9 @@ async function loadShares() {
     tag: state.tag, page: state.page, page_size: state.pageSize,
     sort: state.sort, order: state.order
   });
+  if (state.accountFilter.length > 0) {
+    params.set('account_ids', JSON.stringify(state.accountFilter));
+  }
 
 
   const data = await api('GET', `/api/shares?${params}`);
@@ -1900,11 +1995,132 @@ function setSource(src, el) {
   loadShares();
 }
 
-function setExpire(expire, el) {
+function setExpire(expire) {
   state.expire = expire; state.page = 1;
-  document.querySelectorAll('.filter-btn[data-expire]').forEach(e => e.classList.remove('active'));
-  el.classList.add('active');
   loadShares();
+}
+
+// ── 账号筛选 ────────────────────────────────────────────────
+let _accountFilterAccounts = [];  // 缓存全部账号列表
+let _accountFilterPlatform = 'all'; // 当前选中的平台
+
+function closeAccountFilterModal() {
+  document.getElementById('accountFilterModal').classList.remove('show');
+}
+
+async function showAccountFilterModal() {
+  document.getElementById('accountFilterModal').classList.add('show');
+  await loadAccountFilterOptions();
+}
+
+function switchFilterPlatform(platform, el) {
+  _accountFilterPlatform = platform;
+  // 更新左侧平台选中态
+  document.querySelectorAll('#accountFilterPlatformList .account-platform-item').forEach(item => item.classList.remove('active'));
+  el.classList.add('active');
+  renderAccountFilterList();
+}
+
+async function loadAccountFilterOptions() {
+  const container = document.getElementById('accountFilterList');
+  container.innerHTML = '<div style="text-align:center;color:var(--gray-400);font-size:12px;padding:40px;">加载中...</div>';
+
+  try {
+    const platforms = ['quark', 'baidu', 'uc'];
+    const allAccounts = [];
+
+    for (const platform of platforms) {
+      const res = await fetch(API + '/api/accounts?platform=' + platform);
+      const accounts = (await res.json() || []).filter(acc => acc.cookie && acc.cookie.trim().length > 0);
+      accounts.forEach(acc => acc.platform = platform);
+      allAccounts.push(...accounts);
+    }
+
+    _accountFilterAccounts = allAccounts;
+    _accountFilterPlatform = 'all';
+    // 重置左侧平台选中态
+    document.querySelectorAll('#accountFilterPlatformList .account-platform-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.platform === 'all');
+    });
+    renderAccountFilterList();
+  } catch (e) {
+    container.innerHTML = '<div style="text-align:center;color:var(--danger);font-size:13px;padding:40px;">加载失败</div>';
+  }
+}
+
+function renderAccountFilterList() {
+  const container = document.getElementById('accountFilterList');
+  const selectedIds = state.accountFilter; // 存储 account id 数组
+
+  // 按当前平台过滤
+  const filtered = _accountFilterPlatform === 'all'
+    ? _accountFilterAccounts
+    : _accountFilterAccounts.filter(acc => acc.platform === _accountFilterPlatform);
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="text-align:center;color:var(--gray-400);font-size:12px;padding:40px;">暂无已配置Cookie的账号</div>';
+    updateAccountFilterBtn();
+    return;
+  }
+
+  const platformEmoji = { quark: '🟣', baidu: '🔵', uc: '🟠' };
+
+  let html = '';
+  filtered.forEach(acc => {
+    const name = acc.name || '(未命名)';
+    const checked = selectedIds.includes(acc.id);
+    // 状态标签
+    let statusCls = 'unknown', statusText = '未验证';
+    if (acc.is_valid === 1) { statusCls = 'valid'; statusText = '有效'; }
+    else if (acc.is_valid === -1) { statusCls = 'invalid'; statusText = '失效'; }
+    // 全部视图下显示平台emoji，单平台视图下不重复显示
+    const emoji = _accountFilterPlatform === 'all' ? (platformEmoji[acc.platform] || '⚪') + ' ' : '';
+
+    html += `
+      <label class="account-filter-item ${checked ? 'selected' : ''}">
+        <input type="checkbox" data-acc-id="${acc.id}" ${checked ? 'checked' : ''}
+               onchange="toggleAccountFilter(${acc.id})">
+        <span>${emoji}${escHtml(name)}</span>
+        <span class="account-filter-status ${statusCls}">${statusText}</span>
+      </label>
+    `;
+  });
+
+  container.innerHTML = html;
+  updateAccountFilterBtn();
+}
+
+function toggleAccountFilter(accId) {
+  const idx = state.accountFilter.indexOf(accId);
+  if (idx === -1) {
+    state.accountFilter.push(accId);
+  } else {
+    state.accountFilter.splice(idx, 1);
+  }
+  renderAccountFilterList();
+  state.page = 1;
+  loadShares();
+}
+
+function clearAccountFilter() {
+  state.accountFilter = [];
+  renderAccountFilterList();
+  state.page = 1;
+  loadShares();
+  closeAccountFilterModal();
+}
+
+function updateAccountFilterBtn() {
+  const count = state.accountFilter.length;
+  const el = document.getElementById('accountFilterBtn');
+  const countEl = document.getElementById('accountFilterCount');
+  if (count > 0) {
+    el.classList.add('active');
+    countEl.textContent = count;
+  } else {
+    el.classList.remove('active');
+    countEl.textContent = '账号';
+  }
 }
 
 function updateSortOptions(preserveVal) {
@@ -2086,11 +2302,9 @@ async function setView(mode) {
       const badge = allSourceBtn.querySelector('.badge');
       if (badge) badge.classList.add('primary');
     }
-    // 重置有效期筛选按钮状态
-    document.querySelectorAll('.filter-btn[data-expire]').forEach(el => {
-      el.classList.remove('active');
-    });
-    document.querySelector('.filter-btn[data-expire=""]').classList.add('active');
+    // 重置有效期筛选下拉框
+    const expireSelect = document.getElementById('expireFilter');
+    if (expireSelect) expireSelect.value = '';
 
     // 文件夹视图：先设置按钮状态
     if (batchActions) batchActions.style.display = 'none';
@@ -2161,12 +2375,24 @@ function disableFiltersForFolder() {
     el.onclick = (e) => { e.stopPropagation(); toast('文件夹视图下无法按平台筛选', 'warning'); };
   });
 
-  // 禁用顶部有效期筛选（仅非"全部"选项）
-  document.querySelectorAll('.filter-btn[data-expire]:not([data-expire=""])').forEach(el => {
-    el.style.opacity = '0.4';
-    el.setAttribute('data-original-onclick', el.getAttribute('onclick'));
-    el.onclick = (e) => { e.stopPropagation(); toast('文件夹视图下无法按有效期筛选', 'warning'); };
-  });
+  // 禁用顶部有效期筛选下拉框（阻止交互并显示提示）
+  const expireSelect = document.getElementById('expireFilter');
+  if (expireSelect) {
+    expireSelect.style.pointerEvents = 'none';
+    expireSelect.style.opacity = '0.4';
+    // 在父容器上拦截点击，显示提示
+    expireSelect.parentElement.onclick = (e) => {
+      e.stopPropagation();
+      toast('文件夹视图下无法按有效期筛选', 'warning');
+    };
+  }
+
+  // 禁用顶部账号筛选按钮
+  const accountBtn = document.getElementById('accountFilterBtn');
+  if (accountBtn) {
+    accountBtn.style.opacity = '0.4';
+    accountBtn.style.pointerEvents = 'none';
+  }
 }
 
 function enableFiltersForFolder() {
@@ -2180,15 +2406,20 @@ function enableFiltersForFolder() {
     }
   });
 
-  // 恢复有效期筛选（恢复所有选项）
-  document.querySelectorAll('.filter-btn[data-expire]').forEach(el => {
-    el.style.opacity = '';
-    const origOnclick = el.getAttribute('data-original-onclick');
-    if (origOnclick) {
-      el.removeAttribute('data-original-onclick');
-      el.setAttribute('onclick', origOnclick);
-    }
-  });
+  // 恢复有效期筛选下拉框
+  const expireSelect = document.getElementById('expireFilter');
+  if (expireSelect) {
+    expireSelect.style.pointerEvents = '';
+    expireSelect.style.opacity = '';
+    expireSelect.parentElement.onclick = null;
+  }
+
+  // 恢复顶部账号筛选按钮
+  const accountBtn = document.getElementById('accountFilterBtn');
+  if (accountBtn) {
+    accountBtn.style.opacity = '';
+    accountBtn.style.pointerEvents = '';
+  }
 }
 
 function syncSelectAll(checked) {
