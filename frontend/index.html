@@ -3788,6 +3788,26 @@ let syncState = {
   currentPlatform: null
 };
 
+// 持久化同步账号选择状态
+async function _saveSyncSelection() {
+  const selected = [];
+  Object.keys(syncState.platforms).forEach(platform => {
+    selected.push(...Array.from(syncState.platforms[platform].selected));
+  });
+  await saveSetting('syncSelectedAccounts', JSON.stringify(selected));
+}
+
+async function _loadSyncSelection() {
+  const raw = await getSetting('syncSelectedAccounts', '');
+  if (!raw) return null;
+  try {
+    const ids = JSON.parse(raw);
+    return new Set(ids.map(Number));
+  } catch {
+    return null;
+  }
+}
+
 async function showSyncModal() {
   document.getElementById('syncModal').classList.add('show');
   await loadSyncPlatforms();
@@ -3811,16 +3831,33 @@ async function loadSyncPlatforms() {
     syncState.accounts = [...quarkAccounts, ...baiduAccounts, ...ucAccounts];
     syncState.platforms.quark = {
       accounts: quarkAccounts,
-      selected: new Set(quarkAccounts.filter(acc => acc.is_valid === 1).map(acc => acc.id)) // 默认只选中已验证的
+      selected: new Set(quarkAccounts.filter(acc => acc.is_valid === 1).map(acc => acc.id))
     };
     syncState.platforms.baidu = {
       accounts: baiduAccounts,
-      selected: new Set(baiduAccounts.filter(acc => acc.is_valid === 1).map(acc => acc.id)) // 默认只选中已验证的
+      selected: new Set(baiduAccounts.filter(acc => acc.is_valid === 1).map(acc => acc.id))
     };
     syncState.platforms.uc = {
       accounts: ucAccounts,
-      selected: new Set(ucAccounts.filter(acc => acc.is_valid === 1).map(acc => acc.id)) // 默认只选中已验证的
+      selected: new Set(ucAccounts.filter(acc => acc.is_valid === 1).map(acc => acc.id))
     };
+    
+    // 应用持久化的选择状态（覆盖默认选中）
+    const savedIds = await _loadSyncSelection();
+    if (savedIds) {
+      // 夸克
+      syncState.platforms.quark.selected = new Set(
+        quarkAccounts.filter(acc => savedIds.has(acc.id)).map(acc => acc.id)
+      );
+      // 百度
+      syncState.platforms.baidu.selected = new Set(
+        baiduAccounts.filter(acc => savedIds.has(acc.id)).map(acc => acc.id)
+      );
+      // UC
+      syncState.platforms.uc.selected = new Set(
+        ucAccounts.filter(acc => savedIds.has(acc.id)).map(acc => acc.id)
+      );
+    }
     
     // 渲染平台列表
     renderSyncPlatforms();
@@ -4021,6 +4058,8 @@ function toggleSyncAccount(platform, id) {
   renderSyncAccounts();
   // 更新同步状态
   updateSyncStatus();
+  // 持久化选择状态
+  _saveSyncSelection();
 }
 
 function togglePlatformAll(platform) {
@@ -4038,6 +4077,7 @@ function togglePlatformAll(platform) {
   renderSyncPlatforms();
   renderSyncAccounts();
   updateSyncStatus();
+  _saveSyncSelection();
 }
 
 function showNoAccounts() {
