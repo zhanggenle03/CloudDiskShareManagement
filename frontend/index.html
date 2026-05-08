@@ -672,13 +672,11 @@
         </div>
 
         <div class="filter-group">
-          <span class="filter-label">有效期</span>
-          <select class="filter-select" id="expireFilter" onchange="setExpire(this.value)">
-            <option value="">全部</option>
-            <option value="permanent">永久</option>
-            <option value="limited">限时</option>
-            <option value="expired">已失效</option>
-          </select>
+          <button class="filter-btn active" data-expire="" onclick="setExpire(this, '')">全部</button>
+          <button class="filter-btn" data-expire="permanent" onclick="setExpire(this, 'permanent')">永久</button>
+          <button class="filter-btn" data-expire="limited" onclick="setExpire(this, 'limited')">限时</button>
+          <button class="filter-btn" data-expire="expired" onclick="setExpire(this, 'expired')">已失效</button>
+          <span style="width:1px;height:20px;background:var(--border);margin:0 4px;"></span>
           <button class="filter-btn" id="accountFilterBtn" onclick="showAccountFilterModal()" title="按账号筛选">
             <span>👤</span><span id="accountFilterCount">账号</span>
           </button>
@@ -1995,8 +1993,10 @@ function setSource(src, el) {
   loadShares();
 }
 
-function setExpire(expire) {
+function setExpire(btn, expire) {
   state.expire = expire; state.page = 1;
+  document.querySelectorAll('.filter-group button[data-expire]').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
   loadShares();
 }
 
@@ -2302,9 +2302,10 @@ async function setView(mode) {
       const badge = allSourceBtn.querySelector('.badge');
       if (badge) badge.classList.add('primary');
     }
-    // 重置有效期筛选下拉框
-    const expireSelect = document.getElementById('expireFilter');
-    if (expireSelect) expireSelect.value = '';
+    // 重置有效期筛选按钮
+    document.querySelectorAll('.filter-group button[data-expire]').forEach(b => b.classList.remove('active'));
+    const expireAllBtn = document.querySelector('.filter-group button[data-expire=""]');
+    if (expireAllBtn) expireAllBtn.classList.add('active');
 
     // 文件夹视图：先设置按钮状态
     if (batchActions) batchActions.style.display = 'none';
@@ -2375,17 +2376,11 @@ function disableFiltersForFolder() {
     el.onclick = (e) => { e.stopPropagation(); toast('文件夹视图下无法按平台筛选', 'warning'); };
   });
 
-  // 禁用顶部有效期筛选下拉框（阻止交互并显示提示）
-  const expireSelect = document.getElementById('expireFilter');
-  if (expireSelect) {
-    expireSelect.style.pointerEvents = 'none';
-    expireSelect.style.opacity = '0.4';
-    // 在父容器上拦截点击，显示提示
-    expireSelect.parentElement.onclick = (e) => {
-      e.stopPropagation();
-      toast('文件夹视图下无法按有效期筛选', 'warning');
-    };
-  }
+  // 禁用顶部有效期筛选按钮（阻止交互并显示提示）
+  document.querySelectorAll('.filter-group button[data-expire]').forEach(btn => {
+    btn.style.pointerEvents = 'none';
+    btn.style.opacity = '0.4';
+  });
 
   // 禁用顶部账号筛选按钮
   const accountBtn = document.getElementById('accountFilterBtn');
@@ -2406,13 +2401,11 @@ function enableFiltersForFolder() {
     }
   });
 
-  // 恢复有效期筛选下拉框
-  const expireSelect = document.getElementById('expireFilter');
-  if (expireSelect) {
-    expireSelect.style.pointerEvents = '';
-    expireSelect.style.opacity = '';
-    expireSelect.parentElement.onclick = null;
-  }
+  // 恢复有效期筛选按钮
+  document.querySelectorAll('.filter-group button[data-expire]').forEach(btn => {
+    btn.style.pointerEvents = '';
+    btn.style.opacity = '';
+  });
 
   // 恢复顶部账号筛选按钮
   const accountBtn = document.getElementById('accountFilterBtn');
