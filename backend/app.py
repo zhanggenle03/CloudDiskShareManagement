@@ -27,18 +27,20 @@ from database import (
     init_db, upsert_share, get_shares, update_share,
     delete_share, batch_delete, get_stats, log_import, get_import_logs, clear_import_logs,
     get_all_tag_colors, set_tag_color, delete_tag_color, get_stats_with_colors,
-    get_resource_stats,
+    get_filtered_stats, get_resource_stats,
     get_setting, set_setting, get_all_settings,
     add_account, get_accounts, get_account, update_account, delete_account,
     add_resource, get_resources, get_resource, update_resource, delete_resource,
     add_share_to_resource, remove_share_from_resource, update_resource_shares,
-    get_available_shares, get_conn
+    get_available_shares, get_conn,
+    upsert_check_record, get_check_records, batch_delete_check_records
 )
 from parser import auto_detect_and_parse
 from sync_manager import get_sync_manager
 from process_manager import on_startup, on_shutdown, graceful_shutdown, restart_service, remove_pid, terminate_process, shutdown_service
+from checker import batch_check, check_share_url, detect_platform
 
-app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='')
+app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='/static')
 CORS(app)
 
 # ── 日志 ──
@@ -52,6 +54,40 @@ def index():
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
     return resp
+
+
+@app.route('/check.html')
+def serve_check_page():
+    resp = send_from_directory(FRONTEND_DIR, 'check.html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+
+@app.route('/launch.html')
+def serve_launch_page():
+    resp = send_from_directory(FRONTEND_DIR, 'launch.html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+
+# ── 404 处理：尝试提供前端静态文件 ──
+@app.errorhandler(404)
+def not_found(e):
+    path = request.path.lstrip('/')
+    if path and not path.startswith('api/'):
+        try:
+            resp = send_from_directory(FRONTEND_DIR, path)
+            resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            resp.headers['Pragma'] = 'no-cache'
+            resp.headers['Expires'] = '0'
+            return resp
+        except Exception:
+            pass
+    return jsonify({'error': 'Not found'}), 404
 
 # ─── 导入 CSV ────────────────────────────────────────────────
 @app.route('/api/import', methods=['POST'])
@@ -353,6 +389,34 @@ def cancel_shares():
 # ─── 统计 ────────────────────────────────────────────────────
 @app.route('/api/stats', methods=['GET'])
 def stats():
+    source = request.args.get('source', 'all')
+    expire_filter = request.args.get('expire', '')
+    keyword = request.args.get('keyword', '')
+    tag = request.args.get('tag', '')
+    account_ids_str = request.args.get('account_ids', '')
+    account_ids = []
+    if account_ids_str:
+        try:
+            import json as _json
+            account_ids = _json.loads(account_ids_str)
+        except Exception:
+            pass
+
+    # 有任何筛选条件时，使用带筛选的统计；否则返回全量统计（含颜色）
+    has_filter = (source and source != 'all') or expire_filter or keyword or tag or account_ids
+    if has_filter:
+        filtered = get_filtered_stats(
+            source=source, expire_filter=expire_filter,
+            keyword=keyword, tag=tag, account_ids=account_ids
+        )
+        # 为标签补充颜色
+        colors = get_all_tag_colors()
+        colored_tags = {}
+        for t, cnt in filtered.get('tags', {}).items():
+            colored_tags[t] = {'count': cnt, 'color': colors.get(t, '')}
+        filtered['tags'] = colored_tags
+        filtered['filtered'] = True
+        return jsonify(filtered)
     return jsonify(get_stats_with_colors())
 
 
@@ -1130,6 +1194,161 @@ def list_available_shares():
     return jsonify(result)
 
 
+# ─── 检测记录 API（check_records 表）─────────────────────────
+
+@app.route('/api/check-records', methods=['GET'])
+def get_check_records_api():
+    """获取检测记录列表"""
+    page = int(request.args.get('page', 1))
+    page_size = min(int(request.args.get('page_size', 9999)), 9999)
+    source = request.args.get('source', '')
+    result = get_check_records(page=page, page_size=page_size, source=source)
+    return jsonify(result)
+
+
+@app.route('/api/check-records', methods=['POST'])
+def add_check_record():
+    """手动添加单条检测记录"""
+    data = request.get_json() or {}
+    url = (data.get('url') or '').strip()
+    if not url:
+        return jsonify({'error': '请输入分享链接'}), 400
+    name = (data.get('name') or '').strip()
+    pwd = (data.get('pwd') or '').strip()
+    source = detect_platform(url) or ''
+    result = upsert_check_record({'url': url, 'name': name, 'pwd': pwd, 'source': source})
+    return jsonify({'success': True, 'action': result['action'], 'id': result['id']})
+
+
+@app.route('/api/check-records', methods=['DELETE'])
+def delete_check_records():
+    """批量删除检测记录"""
+    data = request.get_json() or {}
+    ids = data.get('ids', [])
+    if not ids:
+        return jsonify({'error': '请指定要删除的记录ID'}), 400
+    batch_delete_check_records(ids)
+    return jsonify({'success': True, 'deleted': len(ids)})
+
+
+@app.route('/api/check-records/import-shares', methods=['POST'])
+def import_shares_to_check_records():
+    """一键导入主页数据到检测记录"""
+    conn = get_conn()
+    try:
+        conn.execute("""
+            INSERT OR IGNORE INTO check_records (name, url, pwd, source)
+            SELECT name, url, pwd, source FROM shares WHERE is_deleted=0
+        """)
+        conn.commit()
+        imported = conn.total_changes
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+    conn.close()
+    return jsonify({'success': True, 'imported': imported})
+
+
+@app.route('/api/check-records/import-csv', methods=['POST'])
+def import_csv_to_check_records():
+    """导入 CSV 到检测记录"""
+    if 'file' not in request.files:
+        return jsonify({'error': '未上传文件'}), 400
+    f = request.files['file']
+    if not f.filename.endswith('.csv'):
+        return jsonify({'error': '请上传CSV文件'}), 400
+    raw = f.read()
+    try:
+        records, source = auto_detect_and_parse(raw, f.filename)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    total = len(records)
+    imported = skipped = 0
+    source_import = f'CSV导入-{f.filename[:-4] if f.filename.endswith(".csv") else f.filename}'
+    for rec in records:
+        plat = detect_platform(rec.get('url', '')) or ''
+        rec['source'] = plat
+        rec['source_import'] = source_import
+        result = upsert_check_record(rec)
+        if result['action'] == 'inserted':
+            imported += 1
+        else:
+            skipped += 1
+    return jsonify({'success': True, 'filename': f.filename, 'total': total, 'imported': imported, 'skipped': skipped})
+
+
+@app.route('/api/check-records/check-validity', methods=['POST'])
+def check_records_validity():
+    """批量检测检测记录中的链接（结果写入 check_records 表）"""
+    data = request.get_json() or {}
+    record_ids = data.get('record_ids', [])
+    check_all = data.get('all', False)
+    conn = get_conn()
+    if check_all:
+        rows = conn.execute("SELECT id, name, url, pwd FROM check_records").fetchall()
+    elif record_ids:
+        placeholders = ','.join('?' * len(record_ids))
+        rows = conn.execute(
+            f"SELECT id, name, url, pwd FROM check_records WHERE id IN ({placeholders})",
+            list(record_ids)
+        ).fetchall()
+    else:
+        conn.close()
+        return jsonify({'error': '请指定要检测的记录ID或使用 all=true'}), 400
+    conn.close()
+    if not rows:
+        return jsonify({'error': '没有找到待检测的记录'}), 404
+    shares = [dict(r) for r in rows]
+    result = batch_check(shares)
+    conn = get_conn()
+    try:
+        for item in result.get('results', []):
+            conn.execute(
+                "UPDATE check_records SET check_valid=?, check_reason=?, check_time=datetime('now','localtime'), check_duration=? WHERE id=?",
+                (1 if item['valid'] else 0, item.get('failure_reason', ''), item.get('duration_ms', 0), item['id'])
+            )
+        conn.commit()
+    except Exception as e:
+        log.error(f'保存检测结果失败: {e}')
+    finally:
+        conn.close()
+    return jsonify(result)
+
+
+@app.route('/api/check-records/check-validity-one', methods=['POST'])
+def check_one_record_validity():
+    """检测单条检测记录（结果写入 check_records 表）"""
+    data = request.get_json() or {}
+    record_id = data.get('record_id')
+    if not record_id:
+        return jsonify({'error': '缺少 record_id'}), 400
+    conn = get_conn()
+    row = conn.execute("SELECT id, name, url, pwd FROM check_records WHERE id=?", (record_id,)).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({'error': '记录不存在'}), 404
+    share = dict(row)
+    r = check_share_url(share['url'], share.get('pwd', ''))
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE check_records SET check_valid=?, check_reason=?, check_time=datetime('now','localtime'), check_duration=? WHERE id=?",
+            (1 if r.valid else 0, r.failure_reason, r.duration_ms, share['id'])
+        )
+        conn.commit()
+    except Exception as e:
+        log.error(f'保存单条检测结果失败: {e}')
+    finally:
+        conn.close()
+    return jsonify({
+        'id': share['id'], 'name': share['name'], 'url': share['url'],
+        'platform': detect_platform(share['url']),
+        'valid': r.valid, 'failure_reason': r.failure_reason,
+        'duration_ms': r.duration_ms, 'status_code': r.status_code,
+    })
+
+
+# ── 启动入口 ─────────────────────────────────────────────
 if __name__ == '__main__':
     # 单实例保护 + PID 文件写入
     on_startup()

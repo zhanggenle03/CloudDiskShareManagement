@@ -139,11 +139,23 @@ def init_db():
         conn.commit()
         log.info('数据库迁移：shares 表添加 account_id 字段')
 
+    # 数据库迁移：删除 shares 表的检测相关列（check_valid/check_reason/check_time/check_duration）
+    for col in ('check_valid', 'check_reason', 'check_time', 'check_duration'):
+        try:
+            c.execute(f"ALTER TABLE shares DROP COLUMN {col}")
+            conn.commit()
+            log.info(f'数据库迁移：shares 表删除 {col} 字段')
+        except Exception:
+            log.debug(f'shares 表 {col} 字段已不存在，跳过')
+
     conn.close()
     log.info('数据库初始化完成')
     
     # 初始化资源表（文件夹视图）
     init_resource_tables()
+
+    # 初始化检测记录表
+    init_check_records_table()
 
 
 def upsert_share(share: dict) -> dict:
@@ -385,6 +397,78 @@ def get_stats():
     row = dict(c.fetchone())
     # 获取所有标签
     c.execute("SELECT tags FROM shares WHERE is_deleted=0 AND tags != ''")
+    all_tags = []
+    for r in c.fetchall():
+        all_tags.extend([t.strip() for t in r['tags'].split(',') if t.strip()])
+    tag_counts = {}
+    for t in all_tags:
+        tag_counts[t] = tag_counts.get(t, 0) + 1
+    row['tags'] = tag_counts
+    conn.close()
+    return row
+
+
+def get_filtered_stats(source=None, expire_filter=None, keyword=None, tag=None, account_ids=None):
+    """根据当前筛选条件统计分享数量（total/permanent/expiring/expired/baidu_count/quark_count/uc_count）"""
+    conn = get_conn()
+    c = conn.cursor()
+
+    conditions = ["is_deleted = 0"]
+    params = []
+
+    if source and source != 'all':
+        conditions.append("source LIKE ?")
+        params.append(f'{source}%')
+
+    if expire_filter == 'valid':
+        conditions.append("expire NOT IN ('已失效', '分享已过期', '分享失败') AND expire != ''")
+    elif expire_filter == 'limited':
+        conditions.append("expire NOT IN ('已失效', '分享已过期', '分享失败', '永久有效') AND expire != ''")
+    elif expire_filter == 'expired':
+        conditions.append("expire IN ('已失效', '分享已过期', '分享失败')")
+    elif expire_filter == 'permanent':
+        conditions.append("expire = '永久有效'")
+
+    if keyword:
+        conditions.append("(name LIKE ? OR url LIKE ? OR notes LIKE ?)")
+        kw = f'%{keyword}%'
+        params.extend([kw, kw, kw])
+
+    if tag:
+        conditions.append("(',' || tags || ',') LIKE ?")
+        params.append(f'%,{tag},%')
+
+    if account_ids:
+        placeholders = ','.join(['?'] * len(account_ids))
+        acc_cursor = conn.cursor()
+        acc_cursor.execute(f"SELECT name, platform FROM accounts WHERE id IN ({placeholders})", list(account_ids))
+        acc_pairs = [(row['name'], row['platform']) for row in acc_cursor.fetchall()]
+        if acc_pairs:
+            pair_conditions = []
+            for name, platform in acc_pairs:
+                pair_conditions.append("(account_name = ? AND source LIKE ?)")
+                params.extend([name, f'{platform}%'])
+            conditions.append(f"({' OR '.join(pair_conditions)})")
+        else:
+            conditions.append("1 = 0")
+
+    where = " AND ".join(conditions)
+
+    c.execute(f"""
+        SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN source LIKE 'baidu%' THEN 1 ELSE 0 END) as baidu_count,
+            SUM(CASE WHEN source LIKE 'quark%' THEN 1 ELSE 0 END) as quark_count,
+            SUM(CASE WHEN source LIKE 'uc%' THEN 1 ELSE 0 END) as uc_count,
+            SUM(CASE WHEN expire='永久有效' THEN 1 ELSE 0 END) as permanent,
+            SUM(CASE WHEN expire IN ('已失效','分享已过期','分享失败') THEN 1 ELSE 0 END) as expired,
+            SUM(CASE WHEN expire NOT IN ('已失效','分享已过期','分享失败','永久有效') AND expire != '' THEN 1 ELSE 0 END) as expiring
+        FROM shares WHERE {where}
+    """, params)
+    row = dict(c.fetchone())
+
+    # 获取筛选范围内的标签
+    c.execute(f"SELECT tags FROM shares WHERE {where} AND tags != ''", params)
     all_tags = []
     for r in c.fetchall():
         all_tags.extend([t.strip() for t in r['tags'].split(',') if t.strip()])
@@ -885,3 +969,113 @@ def get_available_shares(keyword: str = '', source: str = None, page: int = 1, p
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
     return {'total': total, 'data': rows}
+
+
+# ── 检测记录表（check_records，与 shares 表独立）───────
+
+def init_check_records_table():
+    """创建检测记录表 check_records"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS check_records (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT    NOT NULL DEFAULT '',
+            url             TEXT    NOT NULL,
+            pwd             TEXT    DEFAULT '',
+            source          TEXT    DEFAULT '',
+            source_import   TEXT    DEFAULT '',
+            notes           TEXT    DEFAULT '',
+            check_valid     INTEGER DEFAULT NULL,
+            check_reason    TEXT    DEFAULT '',
+            check_time      TEXT    DEFAULT '',
+            check_duration  INTEGER DEFAULT 0,
+            created_at      TEXT    DEFAULT (datetime('now','localtime'))
+        )
+    """)
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_check_records_url ON check_records(url)")
+    conn.commit()
+    conn.close()
+    log.info('检测记录表初始化完成')
+
+
+def upsert_check_record(record: dict) -> dict:
+    """插入或更新检测记录（按 url 去重）"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT id, name, pwd FROM check_records WHERE url = ?", (record['url'],))
+    row = c.fetchone()
+    new_name = record.get('name', '')
+    new_pwd = record.get('pwd', '')
+    new_source = record.get('source', '')
+    new_source_import = record.get('source_import', '')
+
+    if row:
+        final_name = new_name if new_name else row['name']
+        final_pwd = new_pwd if new_pwd else row['pwd']
+        c.execute(
+            "UPDATE check_records SET name=?, pwd=?, source=?, source_import=? WHERE id=?",
+            (final_name, final_pwd, new_source, new_source_import, row['id'])
+        )
+        conn.commit()
+        conn.close()
+        return {'action': 'updated', 'id': row['id']}
+    else:
+        name = new_name if new_name else '手动添加的链接'
+        c.execute(
+            "INSERT INTO check_records (name, url, pwd, source, source_import) VALUES (?, ?, ?, ?, ?)",
+            (name, record['url'], new_pwd, new_source, new_source_import)
+        )
+        new_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        return {'action': 'inserted', 'id': new_id}
+
+
+def get_check_records(page: int = 1, page_size: int = 9999, source: str = None):
+    """获取检测记录列表"""
+    conn = get_conn()
+    c = conn.cursor()
+    conditions = ["1=1"]
+    params = []
+    if source and source != 'all':
+        conditions.append("source LIKE ?")
+        params.append(f'{source}%')
+    where = " AND ".join(conditions)
+    c.execute(f"SELECT COUNT(*) as cnt FROM check_records WHERE {where}", params)
+    total = c.fetchone()['cnt']
+    offset = (page - 1) * page_size
+    c.execute(
+        f"SELECT * FROM check_records WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        params + [page_size, offset]
+    )
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return {'total': total, 'page': page, 'page_size': page_size, 'data': rows}
+
+
+def batch_delete_check_records(ids: list):
+    """批量硬删除检测记录"""
+    if not ids:
+        return
+    conn = get_conn()
+    placeholders = ','.join('?' * len(ids))
+    conn.execute(f"DELETE FROM check_records WHERE id IN ({placeholders})", ids)
+    conn.commit()
+    conn.close()
+
+
+def update_check_record(record_id: int, fields: dict):
+    """更新检测记录字段"""
+    allowed = {'name', 'pwd', 'source', 'source_import', 'notes',
+               'check_valid', 'check_reason', 'check_time', 'check_duration'}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return False
+    set_clause = ', '.join(f"{k}=?" for k in updates)
+    conn = get_conn()
+    conn.execute(f"UPDATE check_records SET {set_clause} WHERE id=?",
+                 list(updates.values()) + [record_id])
+    conn.commit()
+    conn.close()
+    return True

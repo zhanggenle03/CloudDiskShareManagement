@@ -177,7 +177,7 @@
   .account-edit-cell input[type="password"] { width: 100%; padding: 6px 10px; border: 1.5px solid var(--primary);
                                                border-radius: 6px; font-size: 12px; outline: none; }
   .account-edit-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-  .badge.primary { background: var(--primary); color: #fff; }
+  .badge.primary { background: var(--primary) !important; color: #fff !important; }
 
   /* Stats mini */
   .stats-mini { padding: 12px 16px; margin: 8px 10px; background: linear-gradient(135deg, #4F6EF7 0%, #7B5EA7 100%);
@@ -589,7 +589,7 @@
 
     <div class="stats-mini" id="statsMini">
       <div class="total" id="statTotal">--</div>
-      <div class="label">全部分享链接</div>
+      <div class="label" id="statLabel">全部分享链接</div>
       <div class="stats-row">
         <div class="stat-chip">
           <div class="val" id="statPermanent">--</div>
@@ -647,6 +647,9 @@
       </div>
       <div class="nav-item" onclick="showAccountManager()">
         <span class="icon">👤</span> 账号管理
+      </div>
+      <div class="nav-item" onclick="location.href='check.html'">
+        <span class="icon">✅</span> 有效检测
       </div>
     </div>
 
@@ -1990,7 +1993,15 @@ function setSource(src, el) {
   el.classList.add('active');
   const badge = el.querySelector('.badge');
   if (badge) badge.classList.add('primary');
+  // 同步其他 badge 颜色（选中项加 primary，其他移除）
+  const srcMap = { all: 'navAll', baidu: 'navBaidu', quark: 'navQuark', uc: 'navUc' };
+  const activeId = srcMap[src] || 'navAll';
+  Object.values(srcMap).forEach(id => {
+    const el2 = document.getElementById(id);
+    if (el2) el2.classList.toggle('primary', id === activeId);
+  });
   loadShares();
+  loadStats();
 }
 
 function setExpire(btn, expire) {
@@ -1998,6 +2009,7 @@ function setExpire(btn, expire) {
   document.querySelectorAll('.filter-group button[data-expire]').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   loadShares();
+  loadStats();
 }
 
 // ── 账号筛选 ────────────────────────────────────────────────
@@ -2100,6 +2112,7 @@ function toggleAccountFilter(accId) {
   renderAccountFilterList();
   state.page = 1;
   loadShares();
+  loadStats();
 }
 
 function clearAccountFilter() {
@@ -2107,6 +2120,7 @@ function clearAccountFilter() {
   renderAccountFilterList();
   state.page = 1;
   loadShares();
+  loadStats();
   closeAccountFilterModal();
 }
 
@@ -2428,6 +2442,7 @@ function debounceSearch() {
       loadResourceView();
     } else {
       loadShares();
+      loadStats();
     }
   }, 350);
 }
@@ -2444,6 +2459,7 @@ function setTagFilter(tag, el) {
   }
   state.page = 1;
   loadShares();
+  loadStats();
 }
 
 // 文件夹视图标签筛选
@@ -2460,17 +2476,65 @@ function setFolderTagFilter(tag, el) {
 }
 
 // ── Stats ─────────────────────────────────────────────────
+
+// 根据当前 state 生成描述当前筛选状态的简短文字
+function getFilterLabel() {
+  const parts = [];
+  if (state.source && state.source !== 'all') {
+    const nameMap = { baidu: '百度', quark: '夸克', uc: 'UC' };
+    parts.push(nameMap[state.source] || state.source);
+  }
+  if (state.expire) {
+    const expireMap = { valid: '有效', limited: '限时', expired: '已失效', permanent: '永久' };
+    parts.push(expireMap[state.expire] || state.expire);
+  }
+  if (state.tag) parts.push(`#${state.tag}`);
+  if (state.keyword) parts.push(`"${state.keyword}"`);
+  if (state.accountFilter && state.accountFilter.length > 0) parts.push(`${state.accountFilter.length}个账号`);
+  return parts.length > 0 ? parts.join(' · ') : '全部分享链接';
+}
+
 async function loadStats() {
-  // 先用分享级统计更新左上角数字（所有视图一致）
-  const shareStats = await api('GET', '/api/stats');
+  const hasFilter = (state.source && state.source !== 'all')
+    || state.expire || state.keyword || state.tag
+    || (state.accountFilter && state.accountFilter.length > 0);
+
+  // 构建请求参数（无筛选时走全量接口缓存路径）
+  const params = new URLSearchParams({ source: state.source || 'all' });
+  if (state.expire) params.set('expire', state.expire);
+  if (state.keyword) params.set('keyword', state.keyword);
+  if (state.tag) params.set('tag', state.tag);
+  if (state.accountFilter && state.accountFilter.length > 0) {
+    params.set('account_ids', JSON.stringify(state.accountFilter));
+  }
+
+  const shareStats = await api('GET', `/api/stats?${params}`);
+
+  // 更新左上角数字
   document.getElementById('statTotal').textContent = shareStats.total || 0;
   document.getElementById('statPermanent').textContent = shareStats.permanent || 0;
   document.getElementById('statExpiring').textContent = shareStats.expiring || 0;
   document.getElementById('statExpired').textContent = shareStats.expired || 0;
-  document.getElementById('navAll').textContent = shareStats.total || 0;
-  document.getElementById('navBaidu').textContent = shareStats.baidu_count || 0;
-  document.getElementById('navQuark').textContent = shareStats.quark_count || 0;
-  document.getElementById('navUc').textContent = shareStats.uc_count || 0;
+
+  // 更新 label（筛选状态描述）
+  document.getElementById('statLabel').textContent = getFilterLabel();
+
+  // 侧边栏平台 badge 始终显示全局总量，不随筛选变化
+  // 仅在无筛选（全量请求）时更新，避免筛选时数字抖动
+  if (!hasFilter) {
+    document.getElementById('navAll').textContent = shareStats.total || 0;
+    document.getElementById('navBaidu').textContent = shareStats.baidu_count || 0;
+    document.getElementById('navQuark').textContent = shareStats.quark_count || 0;
+    document.getElementById('navUc').textContent = shareStats.uc_count || 0;
+  }
+
+  // 同步 badge 的 primary 颜色（选中平台的 badge 显示主色，其他保持灰色）
+  const srcMap = { all: 'navAll', baidu: 'navBaidu', quark: 'navQuark', uc: 'navUc' };
+  const activeId = srcMap[state.source] || 'navAll';
+  Object.values(srcMap).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('primary', id === activeId);
+  });
 
   // 更新标签颜色缓存（所有视图共享）
   if (shareStats.tags) {
@@ -2505,30 +2569,14 @@ async function loadStats() {
     return;
   }
 
-  // 非文件夹视图：左下角标签用分享级统计
+  // 非文件夹视图：渲染侧边栏标签
   const s = shareStats;
-  document.getElementById('statTotal').textContent = s.total || 0;
-  document.getElementById('statPermanent').textContent = s.permanent || 0;
-  document.getElementById('statExpiring').textContent = s.expiring || 0;
-  document.getElementById('statExpired').textContent = s.expired || 0;
-  document.getElementById('navAll').textContent = s.total || 0;
-  document.getElementById('navBaidu').textContent = s.baidu_count || 0;
-  document.getElementById('navQuark').textContent = s.quark_count || 0;
-  document.getElementById('navUc').textContent = s.uc_count || 0;
-
-  // 更新标签颜色缓存
-  if (s.tags) {
-    const colorMap = {};
-    for (const [tag, info] of Object.entries(s.tags)) {
-      colorMap[tag] = info.color || '';
-    }
-    state.tagColors = colorMap;
-  }
-
-  // 渲染侧边栏标签
   const tagsEl = document.getElementById('tagsList');
+  // 无筛选时展示全量标签（含 count=0 的新建标签）；有筛选时只展示筛选范围内的标签
+  const tagsSource = hasFilter ? s.tags : s.tags;
   if (s.tags && Object.keys(s.tags).length > 0) {
     tagsEl.innerHTML = Object.entries(s.tags)
+      .filter(([, info]) => !hasFilter || info.count > 0)
       .sort((a,b) => b[1].count - a[1].count)
       .map(([tag, info]) => {
         const isActive = state.tag === tag;
@@ -3576,6 +3624,7 @@ async function applyTheme(theme) {
   state.theme = theme;
   document.documentElement.setAttribute('data-theme', theme);
   document.getElementById('themeIcon').textContent = theme === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('check_theme', theme);
   await saveSetting('theme', theme);
 }
 

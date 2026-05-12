@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>有效性检测 - 云盘分享管理</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☁️</text></svg>">
+<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('check_theme')||'light')</script>
+<style>
+  :root {
+    --primary: #4F6EF7;
+    --primary-light: #EEF1FF;
+    --baidu: #2468F2;
+    --quark: #8B5CF6;
+    --uc: #F97316;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+    --gray-50: #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-300: #D1D5DB;
+    --gray-400: #9CA3AF;
+    --gray-600: #4B5563;
+    --gray-800: #1F2937;
+    --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.05);
+    --bg: #F0F2F8;
+    --bg-card: #fff;
+    --bg-input: #fff;
+    --border: var(--gray-200);
+    --text: var(--gray-800);
+    --text-muted: var(--gray-400);
+    --text-secondary: var(--gray-600);
+    --hover-bg: var(--gray-50);
+    --pwd-bg: #FFF9EC;
+    --pwd-border: #FDE68A;
+    --pwd-text: #92400E;
+  }
+
+  [data-theme="dark"] {
+    --primary-light: #2a3a6b;
+    --gray-50: #1a1f2e;
+    --gray-100: #1e2436;
+    --gray-200: #2a3044;
+    --gray-300: #3d4556;
+    --gray-400: #6b7280;
+    --gray-600: #9ca3af;
+    --gray-800: #e5e7eb;
+    --bg: #111827;
+    --bg-card: #1f2937;
+    --bg-input: #1f2937;
+    --border: #374151;
+    --text: #e5e7eb;
+    --text-muted: #6b7280;
+    --text-secondary: #9ca3af;
+    --hover-bg: #374151;
+    --shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.2);
+    --pwd-bg: #2a2010;
+    --pwd-border: #5c4800;
+    --pwd-text: #fbbf24;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px;
+    transition: background .25s, color .25s;
+  }
+
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar { width: 230px; background: var(--bg-card); border-right: 1px solid var(--border);
+             display: flex; flex-direction: column; position: fixed; top: 0; bottom: 0; z-index: 10; }
+  .main { margin-left: 230px; flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+  .logo { padding: 20px 20px 16px; border-bottom: 1px solid var(--gray-100); }
+  .logo h1 { font-size: 16px; font-weight: 700; color: var(--primary);
+              display: flex; align-items: center; gap: 8px; }
+  .logo h1 span { font-size: 22px; }
+
+  .stats-mini { padding: 12px 16px; margin: 8px 10px; background: linear-gradient(135deg, #4F6EF7 0%, #7B5EA7 100%);
+                border-radius: var(--radius); color: #fff; }
+  .stats-mini .total { font-size: 28px; font-weight: 700; line-height: 1; }
+  .stats-mini .label { font-size: 12px; opacity: .85; margin-top: 2px; }
+  .stats-row { display: flex; gap: 8px; margin-top: 10px; }
+  .stat-chip { flex: 1; background: rgba(255,255,255,.18); border-radius: 6px;
+               padding: 5px 6px; text-align: center; }
+  .stat-chip .val { font-size: 16px; font-weight: 700; }
+  .stat-chip .lbl { font-size: 10px; opacity: .8; }
+
+  .nav-section { padding: 12px 10px 4px; }
+  .nav-label { font-size: 11px; color: var(--gray-400); text-transform: uppercase;
+               letter-spacing: .6px; padding: 0 10px 6px; font-weight: 600; }
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+              border-radius: 8px; cursor: pointer; color: var(--gray-600);
+              font-size: 13.5px; transition: all .15s; text-decoration: none; }
+  .nav-item:hover { background: var(--gray-100); color: var(--gray-800); }
+  .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+  .nav-item .icon { width: 18px; text-align: center; }
+  .nav-badge { margin-left: auto; background: var(--gray-200); color: var(--gray-600);
+               font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+  .nav-badge.primary { background: var(--primary); color: #fff; }
+
+  .sidebar-bottom { margin-top: auto; padding: 10px; border-top: 1px solid var(--gray-100); display: none; }
+
+  .topbar { background: var(--bg-card); border-bottom: 1px solid var(--border);
+            padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 5; flex-shrink: 0; }
+  .topbar-left { display: flex; align-items: center; gap: 8px; }
+  .back-circle { width: 36px; height: 36px; border-radius: 50%; border: none;
+                 display: flex; align-items: center; justify-content: center; text-decoration: none;
+                 color: #fff; font-size: 18px; font-weight: 700; transition: all .15s;
+                 background: var(--primary); cursor: pointer; flex-shrink: 0;
+                 box-shadow: 0 2px 6px rgba(79,110,247,.3); }
+  .back-circle:hover { background: #3B56D9; box-shadow: 0 3px 10px rgba(79,110,247,.45); transform: scale(1.05); }
+  .topbar-right { display: flex; align-items: center; gap: 8px; }
+
+  .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-shrink: 0; flex-wrap: wrap; width: 100%; }
+
+  .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer;
+         font-size: 13px; font-weight: 500; transition: all .15s; display: inline-flex;
+         align-items: center; gap: 6px; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: #3B56D9; }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--gray-100); }
+  .btn-danger { background: rgba(239,68,68,.12); color: var(--danger); }
+  .btn-danger:hover { background: rgba(239,68,68,.22); }
+
+  .result-info { color: var(--gray-400); font-size: 13px; white-space: nowrap; }
+  .select-all-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); }
+
+  .content { padding: 20px 24px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .data-scroll-area { flex: 1; overflow-y: auto; min-height: 0; }
+
+  .progress-wrap { display: none; margin-bottom: 14px; flex-shrink: 0; }
+  .progress-wrap.active { display: block; }
+  .progress-bar-bg { width: 100%; height: 6px; background: var(--gray-200); border-radius: 3px; overflow: hidden; }
+  .progress-bar { height: 100%; background: linear-gradient(90deg, var(--primary), var(--success));
+                  border-radius: 3px; transition: width .3s ease; width: 0%; }
+  .progress-info { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  .table-view { background: var(--bg-card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: visible; }
+  .table-view table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+  .table-view thead th { background: var(--bg-card); padding: 8px 12px; text-align: left;
+                         font-weight: 600; color: var(--gray-600); border-bottom: 2px solid var(--gray-200);
+                         white-space: nowrap; position: sticky; top: 0; z-index: 10; }
+  .table-view thead th.th-center { text-align: center; }
+  .table-view tbody tr { transition: background .12s; }
+  .table-view tbody tr:hover { background: var(--primary-light); }
+  .table-view tbody td { padding: 6px 12px; border-bottom: 1px solid var(--gray-100);
+                          vertical-align: middle; height: 36px; }
+
+  .td-check { text-align: center; }
+  .td-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .td-url { overflow: hidden; white-space: nowrap; }
+  .td-url .url-link { display: inline-block; max-width: calc(100% - 60px); overflow: hidden; text-overflow: ellipsis;
+                       color: var(--primary); text-decoration: none; font-size: 12px; vertical-align: middle; }
+  .td-url .url-link:hover { text-decoration: underline; }
+  .td-url .copy-btn { display: inline-block; vertical-align: middle; padding: 2px 8px; border: 1px solid var(--border); border-radius: 5px;
+                      background: var(--bg-card); cursor: pointer; font-size: 11px; color: var(--text-secondary);
+                      white-space: nowrap; width: 52px; text-align: center; transition: all .15s; margin-left: 4px; }
+  .td-url .copy-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .td-url .copy-btn.copied { background: var(--success); color: #fff; border-color: var(--success); }
+  .td-pwd { text-align: center; }
+  .td-pwd .pwd-tag { background: var(--pwd-bg); color: var(--pwd-text); border: 1px solid var(--pwd-border);
+                     padding: 2px 8px; border-radius: 5px; font-size: 12px; font-weight: 600;
+                     cursor: pointer; transition: all .15s; display: inline-flex; min-width: 48px;
+                     text-align: center; align-items: center; justify-content: center; white-space: nowrap; }
+  .td-pwd .pwd-tag:hover { filter: brightness(1.1); }
+  .td-source { text-align: center; }
+  .td-source .source-badge { display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+                             padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+                             min-width: 48px; text-align: center; margin: 0 auto; }
+  .source-badge.baidu { background: rgba(36,104,242,.12); color: var(--baidu); }
+  .source-badge.quark { background: rgba(139,92,246,.12); color: var(--quark); }
+  .source-badge.uc { background: rgba(249,115,22,.12); color: var(--uc); }
+  .td-account { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account-tag { font-size: 12px; color: var(--text-secondary); }
+  .td-status { white-space: nowrap; position: relative; }
+  .check-badge { display: inline-flex; align-items: center; gap: 4px;
+                 padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .check-badge.valid { background: rgba(16,185,129,.15); color: var(--success); }
+  .check-badge.invalid { background: rgba(239,68,68,.15); color: var(--danger); }
+  .check-badge.pending { background: var(--gray-100); color: var(--text-muted); }
+  [data-theme="dark"] .check-badge.valid { background: #064E3B; color: #6EE7B7; }
+  [data-theme="dark"] .check-badge.invalid { background: #450A0A; color: #FCA5A5; }
+  [data-theme="dark"] .check-badge.pending { background: #374151; color: #9CA3AF; }
+  .reason-text { font-size: 11px; color: var(--text-muted); margin-top: 2px;
+                 overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-wrap { display: inline-flex; align-items: center; gap: 5px; }
+  .reason-icon { display: inline-flex; align-items: center; justify-content: center;
+                  width: 18px; height: 18px; border-radius: 50%; background: var(--gray-300);
+                  color: #fff; font-size: 11px; font-weight: 700; cursor: pointer;
+                  flex-shrink: 0; transition: background .15s; line-height: 1; }
+  .reason-icon:hover { background: var(--gray-400); }
+  [data-theme="dark"] .reason-icon { background: var(--gray-600); }
+  [data-theme="dark"] .reason-icon:hover { background: var(--gray-500); }
+  .reason-popup { position: fixed; background: var(--bg-card); border: 1px solid var(--border);
+                   border-radius: 8px; padding: 8px 12px; font-size: 12px; color: var(--text-secondary);
+                   box-shadow: 0 4px 16px rgba(0,0,0,.15); z-index: 9999; white-space: normal;
+                   min-width: 120px; max-width: 240px; word-break: break-all;
+                   pointer-events: none; transform: translateX(-50%); }
+  .reason-popup::before { content: ''; position: absolute; top: -5px; left: 50%;
+                           transform: translateX(-50%) rotate(45deg);
+                           width: 8px; height: 8px; background: var(--bg-card);
+                           border-left: 1px solid var(--border); border-top: 1px solid var(--border); }
+  .td-check-time { text-align: center; white-space: nowrap; font-size: 12px; color: var(--text-muted); }
+  .col-filter { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+                border-radius: 3px; cursor: pointer; font-size: 10px; margin-left: 2px;
+                color: var(--gray-400); transition: all .15s; vertical-align: middle; user-select: none; }
+  .col-filter:hover { background: var(--gray-200); color: var(--text); }
+  .col-filter.active { background: var(--primary); color: #fff; }
+
+  .filter-dropdown { position: fixed; background: var(--bg-card); border: 1px solid var(--border);
+                     border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.12); z-index: 9999;
+                     min-width: 180px; max-width: 240px; max-height: 280px; overflow-y: auto;
+                     padding: 6px 0; font-size: 13px; }
+  .filter-dropdown .fd-header { padding: 6px 12px 4px; border-bottom: 1px solid var(--gray-100);
+                                display: flex; gap: 8px; font-size: 12px; }
+  .filter-dropdown .fd-header span { cursor: pointer; color: var(--primary); }
+  .filter-dropdown .fd-header span:hover { text-decoration: underline; }
+  .filter-dropdown .fd-item { display: flex; align-items: center; gap: 6px; padding: 5px 12px;
+                              cursor: pointer; user-select: none; }
+                              cursor: pointer; transition: background .1s; }
+  .filter-dropdown .fd-item:hover { background: var(--gray-50); }
+  .filter-dropdown .fd-item input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--primary); cursor: pointer; }
+  .filter-dropdown .fd-item .fd-count { margin-left: auto; font-size: 11px; color: var(--gray-400); min-width: 20px; text-align: right; }
+  [data-theme="dark"] .filter-dropdown .fd-item:hover { background: var(--gray-100); }
+  .td-duration { text-align: center; white-space: nowrap; font-size: 12px; color: var(--gray-400);
+                 font-variant-numeric: tabular-nums; }
+  .td-actions { text-align: center; white-space: nowrap; overflow: hidden; padding-right: 16px; }
+  .action-btn { padding: 4px 8px; border: 1px solid var(--gray-200); border-radius: 7px;
+                background: var(--bg-card); cursor: pointer; font-size: 12px; color: var(--text-secondary);
+                transition: all .15s; text-align: center; white-space: nowrap; }
+  .action-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+  .action-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--gray-400); }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 15px; }
+  .empty-state small { font-size: 13px; margin-top: 6px; display: block; }
+
+  .toast-container { position: fixed; top: 20px; right: 20px; z-index: 999;
+                     display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .toast { background: var(--gray-800); color: var(--bg); padding: 10px 16px; border-radius: 10px;
+           font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+           animation: slideIn .3s ease; display: flex; align-items: center; gap: 8px;
+           pointer-events: all; max-width: 320px; }
+  .toast.success { background: #065F46; }
+  .toast.error { background: #991B1B; }
+  .toast.warning { background: #92400E; }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--gray-400); }
+
+  @media (max-width: 768px) {
+    .sidebar { width: 200px; }
+    .main { margin-left: 200px; }
+  }
+
+  /* Modal */
+  .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                   background: rgba(0,0,0,.4); z-index: 9999;
+                   display: flex; align-items: center; justify-content: center; }
+  .modal-content { background: var(--bg-card); border-radius: 12px;
+                   box-shadow: 0 8px 32px rgba(0,0,0,.2);
+                   width: 420px; max-width: 90vw; overflow: hidden; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between;
+                  padding: 16px 20px; border-bottom: 1px solid var(--border);
+                  font-size: 15px; font-weight: 600; }
+  .modal-close { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+                 border-radius: 6px; cursor: pointer; color: var(--gray-400); font-size: 16px;
+                 transition: all .15s; }
+  .modal-close:hover { background: var(--gray-100); color: var(--text); }
+  .modal-body { padding: 20px; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px;
+                  border-top: 1px solid var(--border); }
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; font-weight: 500; }
+  .form-input { width: 100%; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+                background: var(--bg-input); color: var(--text); font-size: 13px; outline: none;
+                transition: border-color .15s; }
+  .form-input:focus { border-color: var(--primary); }
+  [data-theme="dark"] .modal-overlay { background: rgba(0,0,0,.55); }
+</style>
+</head>
+<body oncontextmenu="return false;">
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <a href="index.html" style="text-decoration:none;">
+        <h1><span>☁️</span>云盘分享管理</h1>
+      </a>
+    </div>
+
+    <div class="stats-mini" id="statsMini">
+      <div class="total" id="statTotal">--</div>
+      <div class="label">检测记录</div>
+      <div class="stats-row">
+        <div class="stat-chip">
+          <div class="val" id="statValid">--</div>
+          <div class="lbl">有效</div>
+        </div>
+        <div class="stat-chip">
+          <div class="val" id="statInvalid">--</div>
+          <div class="lbl">失效</div>
+        </div>
+        <div class="stat-chip">
+          <div class="val" id="statPending">--</div>
+          <div class="lbl">待检</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">平台筛选</div>
+      <div class="nav-item active" data-source="all" onclick="setSourceFilter('all', this)">
+        <span class="icon">🗂</span> 全部
+        <span class="nav-badge primary" id="navAll">0</span>
+      </div>
+      <div class="nav-item" data-source="baidu" onclick="setSourceFilter('baidu', this)">
+        <span class="icon">🔵</span> 百度网盘
+        <span class="nav-badge" id="navBaidu">0</span>
+      </div>
+      <div class="nav-item" data-source="quark" onclick="setSourceFilter('quark', this)">
+        <span class="icon">🟣</span> 夸克网盘
+        <span class="nav-badge" id="navQuark">0</span>
+      </div>
+      <div class="nav-item" data-source="uc" onclick="setSourceFilter('uc', this)">
+        <span class="icon">🟠</span> UC网盘
+        <span class="nav-badge" id="navUc">0</span>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">操作</div>
+      <div class="nav-item" onclick="document.getElementById('csvFileInput').click()" style="cursor:pointer;">
+        <span class="icon">📥</span> 导入CSV
+      </div>
+      <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="importCsv(this)">
+      <div class="nav-item" onclick="showAddRecordDialog()" style="cursor:pointer;">
+        <span class="icon">➕</span> 手动添加
+      </div>
+      <div class="nav-item" onclick="importFromShares()" style="cursor:pointer;">
+        <span class="icon">📋</span> 导入主页数据
+      </div>
+    </div>
+
+    <div class="sidebar-bottom">
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <a href="index.html" class="back-circle" title="返回主页">←</a>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="toolbar">
+        <input type="checkbox" class="select-all-check" id="selectAllCheck" onchange="toggleSelectAll()" title="全选/取消">
+        <span class="result-info" id="resultInfo">共 0 条</span>
+        <span class="result-info" style="margin-left:4px;"><span id="selectedCount">0</span> 条选中</span>
+        <button class="btn btn-danger" id="deleteSelectedBtn" onclick="deleteSelected()" style="display:none">🗑️ 删除</button>
+        <span style="flex:1"></span>
+        <button class="btn btn-primary" id="startCheckBtn" onclick="startCheck()">▶ 开始检测</button>
+      </div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar-bg">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="progress-info">
+          <span id="progressText">准备中…</span>
+          <span id="progressDetail">0 / 0</span>
+        </div>
+      </div>
+
+      <div class="data-scroll-area">
+        <div class="table-view" id="tableWrap">
+          <table>
+            <colgroup>
+              <col style="width:36px">
+              <col>
+              <col style="width:60px">
+              <col style="width:100px">
+              <col style="width:200px">
+              <col style="width:90px">
+              <col style="width:120px">
+              <col style="width:150px">
+              <col style="width:60px">
+              <col style="width:90px">
+            </colgroup>
+            <thead>
+              <tr>
+                <th></th>
+                <th>文件名</th>
+                <th class="th-center">平台</th>
+                <th>账号 <span class="col-filter" onclick="toggleAccountDropdown(event)" id="accountFilterIcon">▾</span></th>
+                <th>链接</th>
+                <th class="th-center">提取码</th>
+                <th>状态 <span class="col-filter" onclick="toggleStatusDropdown(event)" id="statusFilterIcon">▾</span></th>
+                <th>检测时间</th>
+                <th class="th-center">耗时</th>
+                <th class="th-center">操作</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+          <div class="empty-state" id="emptyState">
+            <div class="icon">📋</div>
+            <p>暂无数据</p>
+            <small>通过侧边栏「操作」添加链接进行有效性检查</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 删除确认对话框 -->
+<div class="modal-overlay" id="deleteConfirmModal" style="display:none;" onclick="closeDeleteConfirm(event)">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span>🗑️ 删除确认</span>
+      <span class="modal-close" onclick="closeDeleteConfirm()">✕</span>
+    </div>
+    <div class="modal-body" style="font-size:14px;line-height:1.6;">
+      <p id="deleteConfirmText"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeDeleteConfirm()">取消</button>
+      <button class="btn btn-danger" onclick="submitDelete()" style="background:var(--danger);color:#fff;">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 手动添加对话框 -->
+<div class="modal-overlay" id="addRecordModal" style="display:none;" onclick="closeAddRecordDialog(event)">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span>➕ 手动添加链接</span>
+      <span class="modal-close" onclick="closeAddRecordDialog()">✕</span>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>分享链接 <span style="color:var(--danger)">*</span></label>
+        <input type="text" id="addUrl" placeholder="https://pan.baidu.com/s/..." class="form-input">
+      </div>
+      <div class="form-group">
+        <label>名称（可选）</label>
+        <input type="text" id="addName" placeholder="链接名称" class="form-input">
+      </div>
+      <div class="form-group">
+        <label>提取码（可选）</label>
+        <input type="text" id="addPwd" placeholder="提取码" class="form-input">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAddRecordDialog()">取消</button>
+      <button class="btn btn-primary" onclick="submitAddRecord()">确认添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const state = {
+  theme: 'light',
+  records: [],
+  checking: false,
+  sourceFilter: 'all',
+  accountFilter: new Set(),
+  statusFilter: new Set(),
+  selected: new Set(),
+};
+
+// Theme
+async function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.setAttribute('data-theme', theme);
+}
+
+function showToast(msg, type = 'info') {
+  const c = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 3000);
+}
+
+function detectPlatform(url) {
+  if (!url) return null;
+  if (/pan\.baidu\.com\/s\//.test(url)) return 'baidu';
+  if (/pan\.quark\.cn\/s\//.test(url)) return 'quark';
+  if (/drive\.uc\.cn\/s\//.test(url)) return 'uc';
+  return null;
+}
+const PLATFORM_NAMES = { baidu: '百度', quark: '夸克', uc: 'UC' };
+
+// API
+async function fetchCheckRecords() {
+  try {
+    const r = await fetch('/api/check-records?page=1&page_size=9999');
+    const d = await r.json();
+    return d.data || [];
+  } catch (e) { showToast('获取记录失败', 'error'); return []; }
+}
+
+function formatDuration(ms) {
+  if (!ms || ms <= 0) return '-';
+  if (ms < 1000) return ms + 'ms';
+  return (ms / 1000).toFixed(1) + 's';
+}
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function getVisibleRecords() {
+  let r = state.records;
+  if (state.sourceFilter !== 'all') r = r.filter(x => (x.source||'').startsWith(state.sourceFilter));
+  r = r.filter(x => state.accountFilter.has((x.source||'').split(':').slice(1).join(':') || '(无账号)'));
+  r = r.filter(x => state.statusFilter.has(statusKey(x)));
+  return r;
+}
+
+function statusKey(x) {
+  if (x.check_valid === 1) return 'valid';
+  if (x.check_valid === 0) return 'invalid';
+  return 'pending';
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tableBody');
+  const empty = document.getElementById('emptyState');
+  const records = getVisibleRecords();
+  if (records.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    document.getElementById('resultInfo').textContent = '共 0 条';
+    return;
+  }
+  empty.style.display = 'none';
+  document.getElementById('resultInfo').textContent = `共 ${records.length} 条`;
+
+  tbody.innerHTML = records.map(r => {
+    const cv = r.check_valid;
+    const status = cv === 1 ? 'valid' : (cv === 0 ? 'invalid' : 'pending');
+    const st = cv === 1 ? '✅ 有效' : (cv === 0 ? '❌ 失效' : '⏳ 待检测');
+    const reason = r.check_reason || '';
+    const dur = r.check_duration || 0;
+    const srcParts = (r.source || '').split(':');
+    const pf = srcParts[0] || detectPlatform(r.url) || '';
+    const an = srcParts.slice(1).join(':') || '';
+    const pn = PLATFORM_NAMES[pf] || pf.toUpperCase() || '?';
+    const ah = an ? `<span class="account-tag">${escHtml(an)}</span>` : '<span style="color:var(--gray-400)">—</span>';
+    const ph = r.pwd ? `<span class="pwd-tag" onclick="copyText('${escHtml(r.pwd)}',this)">🔑 ${escHtml(r.pwd)}</span>` : '<span style="color:var(--gray-400)">—</span>';
+
+    return `<tr data-id="${r.id}">
+    <td class="td-check"><input type="checkbox" ${state.selected.has(r.id)?'checked':''} onchange="toggleRow(${r.id})" style="width:16px;height:16px;cursor:pointer;accent-color:var(--primary);"></td>
+    <td class="td-name" title="${escHtml(r.name)}">${escHtml(r.name)}</td>
+    <td class="td-source"><span class="source-badge ${pf}">${pn}</span></td>
+    <td class="td-account">${ah}</td>
+    <td class="td-url"><a class="url-link" href="${escHtml(r.url||'')}" target="_blank" title="${escHtml(r.url||'')}">${escHtml(r.url||'')}</a><button class="copy-btn" onclick="copyLinkOnly('${escHtml(r.url||'')}',this)">复制</button></td>
+    <td class="td-pwd">${ph}</td>
+    <td class="td-status"><span class="status-wrap"><span class="check-badge ${status}">${st}</span>${reason?`<span class="reason-icon" data-reason="${escHtml(reason)}" onmouseenter="showReason(this)" onmouseleave="hideReason()">!</span>`:''}</span></td>
+    <td class="td-check-time">${r.check_time ? escHtml(r.check_time) : ''}</td>
+    <td class="td-duration">${formatDuration(dur)}</td>
+    <td class="td-actions"><button class="action-btn" onclick="checkOne(${r.id})" ${state.checking?'disabled':''}>▶ 检测</button></td>
+  </tr>`;
+  }).join('');
+  updateSelectedInfo();
+}
+
+function updateStats() {
+  let r = state.records;
+  if (state.sourceFilter !== 'all') r = r.filter(x => (x.source||'').startsWith(state.sourceFilter));
+  document.getElementById('statTotal').textContent = r.length;
+  document.getElementById('statValid').textContent = r.filter(x=>x.check_valid===1).length;
+  document.getElementById('statInvalid').textContent = r.filter(x=>x.check_valid===0).length;
+  document.getElementById('statPending').textContent = r.length - r.filter(x=>x.check_valid!==null).length;
+  document.getElementById('navAll').textContent = state.records.length;
+  document.getElementById('navBaidu').textContent = state.records.filter(x=>(x.source||'').startsWith('baidu')).length;
+  document.getElementById('navQuark').textContent = state.records.filter(x=>(x.source||'').startsWith('quark')).length;
+  document.getElementById('navUc').textContent = state.records.filter(x=>(x.source||'').startsWith('uc')).length;
+
+  // 更新筛选器图标状态
+  const allAccounts = getFilteredAccounts();
+  const accFull = allAccounts.every(a => state.accountFilter.has(a.value));
+  document.getElementById('accountFilterIcon').classList.toggle('active', !accFull);
+
+  const allStatuses = getFilteredStatuses();
+  const stFull = allStatuses.every(s => state.statusFilter.has(s.value));
+  document.getElementById('statusFilterIcon').classList.toggle('active', !stFull);
+}
+
+function toggleSelectAll() {
+  const ck = document.getElementById('selectAllCheck').checked;
+  getVisibleRecords().forEach(r => { if (ck) state.selected.add(r.id); else state.selected.delete(r.id); });
+  renderTable();
+  updateDeleteBtn();
+}
+function toggleRow(id) {
+  if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id);
+  updateSelectedInfo();
+  updateDeleteBtn();
+}
+function updateSelectedInfo() { document.getElementById('selectedCount').textContent = state.selected.size; }
+function updateDeleteBtn() { document.getElementById('deleteSelectedBtn').style.display = state.selected.size > 0 ? '' : 'none'; }
+
+function setSourceFilter(source, el) {
+  state.sourceFilter = source;
+  document.querySelectorAll('.nav-item[data-source]').forEach(n => { n.classList.remove('active'); const b=n.querySelector('.nav-badge'); if(b) b.classList.remove('primary'); });
+  el.classList.add('active');
+  const b=el.querySelector('.nav-badge'); if(b) b.classList.add('primary');
+  updateStats(); renderTable();
+}
+
+// ── Status filter dropdown ──
+const STATUS_LABELS = { valid: '有效', invalid: '失效', pending: '待检测' };
+
+let _dropdownCloseHandler = null;
+
+// ── Account filter dropdown ──
+function toggleAccountDropdown(e) {
+  e.stopPropagation();
+  removeDropdown('accountFilterDropdown', 'accountFilterIcon');
+  const icon = document.getElementById('accountFilterIcon');
+  const accounts = getFilteredAccounts();
+  renderFilterDropdown(icon, 'accountFilterDropdown', 'accountFilterIcon',
+    accounts, a => a, a => state.accountFilter.has(a), 'accountFilter');
+  addCloseHandler('accountFilterDropdown', 'accountFilterIcon');
+}
+
+function getFilteredAccounts() {
+  let r = state.records;
+  if (state.sourceFilter !== 'all') r = r.filter(x => (x.source||'').startsWith(state.sourceFilter));
+  const allSt = ['valid','invalid','pending'];
+  if (!allSt.every(s => state.statusFilter.has(s))) {
+    r = r.filter(x => state.statusFilter.has(x.check_valid===1?'valid':x.check_valid===0?'invalid':'pending'));
+  }
+  const counts = {};
+  r.forEach(x => { const a = (x.source||'').split(':').slice(1).join(':') || '(无账号)'; counts[a] = (counts[a]||0) + 1; });
+  return Object.entries(counts).sort((a,b) => a[0].localeCompare(b[0])).map(([k,v]) => ({value:k, count:v}));
+}
+
+function getFilteredStatuses() {
+  let r = state.records;
+  if (state.sourceFilter !== 'all') r = r.filter(x => (x.source||'').startsWith(state.sourceFilter));
+  const allAcc = [...new Set(state.records.map(x => (x.source||'').split(':').slice(1).join(':') || '(无账号)'))];
+  if (!allAcc.every(a => state.accountFilter.has(a))) {
+    r = r.filter(x => state.accountFilter.has((x.source||'').split(':').slice(1).join(':') || '(无账号)'));
+  }
+  const counts = {};
+  r.forEach(x => { const s = x.check_valid===1?'valid':x.check_valid===0?'invalid':'pending'; counts[s] = (counts[s]||0) + 1; });
+  return Object.entries(counts).map(([k,v]) => ({value:k, count:v}));
+}
+
+// ── Status filter dropdown ──
+function toggleStatusDropdown(e) {
+  e.stopPropagation();
+  removeDropdown('statusFilterDropdown', 'statusFilterIcon');
+  const icon = document.getElementById('statusFilterIcon');
+  const statuses = getFilteredStatuses();
+  renderFilterDropdown(icon, 'statusFilterDropdown', 'statusFilterIcon',
+    statuses, a => STATUS_LABELS[a], a => state.statusFilter.has(a), 'statusFilter');
+  addCloseHandler('statusFilterDropdown', 'statusFilterIcon');
+}
+
+function addCloseHandler(id, iconId) {
+  if (_dropdownCloseHandler) document.removeEventListener('mousedown', _dropdownCloseHandler);
+  _dropdownCloseHandler = function() { removeDropdown(id, iconId); };
+  document.addEventListener('mousedown', _dropdownCloseHandler);
+}
+
+// ── Generic filter dropdown ──
+function renderFilterDropdown(icon, id, iconId, items, labelFn, checkedFn, filterName) {
+  const div = document.createElement('div');
+  div.className = 'filter-dropdown';
+  div.id = id;
+  div.addEventListener('click', e => e.stopPropagation());
+  div.addEventListener('mousedown', e => e.stopPropagation());
+  let html = `<div class="fd-header">
+    <span onclick="selectAllFilter('${filterName}')">全选</span>
+    <span onclick="invertFilter('${filterName}')">反选</span>
+  </div>`;
+  items.forEach(a => {
+    const val = escHtml(a.value);
+    const checked = checkedFn(a.value) ? 'checked' : '';
+    html += `<div class="fd-item" onclick="clickFilterItem('${filterName}','${val}',this)"><input type="checkbox" ${checked}><span>${labelFn(a.value)}</span><span class="fd-count">${a.count}</span></div>`;
+  });
+  div.innerHTML = html;
+  document.body.appendChild(div);
+  if (icon) {
+    const ir = icon.getBoundingClientRect();
+    div.style.top = (ir.bottom + 4) + 'px';
+    div.style.left = Math.max(4, ir.left) + 'px';
+  }
+}
+
+function clickFilterItem(filterName, value, el) {
+  const set = filterName === 'accountFilter' ? state.accountFilter : state.statusFilter;
+  const cb = el.querySelector('input[type=checkbox]');
+  if (set.has(value)) { set.delete(value); cb.checked = false; }
+  else { set.add(value); cb.checked = true; }
+  renderTable(); updateStats();
+}
+
+function removeDropdown(id, iconId) {
+  const d = document.getElementById(id);
+  if (d) d.remove();
+  if (_dropdownCloseHandler) { document.removeEventListener('mousedown', _dropdownCloseHandler); _dropdownCloseHandler = null; }
+  // 关闭后刷新图标状态
+  updateStats();
+}
+
+function refreshDropdown(id, iconId, filterName) {
+  const old = document.getElementById(id);
+  if (!old) return;
+  if (_dropdownCloseHandler) document.removeEventListener('mousedown', _dropdownCloseHandler);
+  old.remove();
+  if (filterName === 'accountFilter') toggleAccountDropdown({stopPropagation:()=>{}});
+  else if (filterName === 'statusFilter') toggleStatusDropdown({stopPropagation:()=>{}});
+}
+
+function selectAllFilter(filterName) {
+  const set = filterName === 'accountFilter' ? state.accountFilter : state.statusFilter;
+  const items = filterName === 'accountFilter' ? getFilteredAccounts() : getFilteredStatuses();
+  items.forEach(a => set.add(a.value));
+  refreshDropdown(filterName+'Dropdown', filterName+'Icon', filterName);
+  renderTable(); updateStats();
+}
+
+function invertFilter(filterName) {
+  const set = filterName === 'accountFilter' ? state.accountFilter : state.statusFilter;
+  const items = filterName === 'accountFilter' ? getFilteredAccounts() : getFilteredStatuses();
+  items.forEach(a => {
+    if (set.has(a.value)) set.delete(a.value);
+    else set.add(a.value);
+  });
+  refreshDropdown(filterName+'Dropdown', filterName+'Icon', filterName);
+  renderTable(); updateStats();
+}
+
+// CSV Import
+async function importCsv(input) {
+  const f = input.files[0]; if(!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  try {
+    const r = await fetch('/api/check-records/import-csv', {method:'POST', body:fd});
+    const d = await r.json();
+    if(d.error) showToast('导入失败: '+d.error, 'error');
+    else { showToast(`导入完成: 新增${d.imported}条`, 'success'); await loadRecords(); }
+  } catch(e) { showToast('导入失败: '+e.message, 'error'); }
+  input.value = '';
+}
+
+// Manual Add Dialog
+function showAddRecordDialog() {
+  document.getElementById('addRecordModal').style.display = 'flex';
+  document.getElementById('addUrl').value = '';
+  document.getElementById('addName').value = '';
+  document.getElementById('addPwd').value = '';
+  document.getElementById('addUrl').focus();
+}
+function closeAddRecordDialog(e) {
+  if(e && e.target !== e.currentTarget) return;
+  document.getElementById('addRecordModal').style.display = 'none';
+}
+async function submitAddRecord() {
+  const url = document.getElementById('addUrl').value.trim();
+  if(!url) { showToast('请输入分享链接', 'warning'); return; }
+  const name = document.getElementById('addName').value.trim();
+  const pwd = document.getElementById('addPwd').value.trim();
+  try {
+    const r = await fetch('/api/check-records', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url,name,pwd})});
+    const d = await r.json();
+    if(d.error) showToast('添加失败: '+d.error, 'error');
+    else { showToast('添加成功', 'success'); closeAddRecordDialog(); await loadRecords(); }
+  } catch(e) { showToast('添加失败: '+e.message, 'error'); }
+}
+
+// Import from shares
+async function importFromShares() {
+  try {
+    const r = await fetch('/api/check-records/import-shares', {method:'POST'});
+    const d = await r.json();
+    if(d.error) showToast('导入失败: '+d.error, 'error');
+    else { showToast(`已导入 ${d.imported} 条`, 'success'); await loadRecords(); }
+  } catch(e) { showToast('导入失败: '+e.message, 'error'); }
+}
+
+// Delete Confirm
+let _deleteIds = [];
+
+function deleteSelected() {
+  _deleteIds = Array.from(state.selected);
+  if(_deleteIds.length===0) return;
+  document.getElementById('deleteConfirmText').textContent = `确定删除选中的 ${_deleteIds.length} 条检测记录？此操作不可恢复。`;
+  document.getElementById('deleteConfirmModal').style.display = 'flex';
+}
+
+function closeDeleteConfirm(e) {
+  if(e && e.target !== e.currentTarget) return;
+  document.getElementById('deleteConfirmModal').style.display = 'none';
+  _deleteIds = [];
+}
+
+async function submitDelete() {
+  const ids = _deleteIds;
+  document.getElementById('deleteConfirmModal').style.display = 'none';
+  _deleteIds = [];
+  if(ids.length===0) return;
+  try {
+    const r = await fetch('/api/check-records', {method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids})});
+    const d = await r.json();
+    if(d.error) showToast('删除失败: '+d.error, 'error');
+    else { showToast(`已删除 ${d.deleted} 条`, 'success'); state.selected.clear(); updateDeleteBtn(); await loadRecords(); }
+  } catch(e) { showToast('删除失败: '+e.message, 'error'); }
+}
+
+// Batch Check
+async function startCheck() {
+  const records = getVisibleRecords();
+  if(records.length===0) { showToast('没有可检测的记录', 'info'); return; }
+  state.checking = true;
+  document.getElementById('startCheckBtn').disabled = true;
+  document.getElementById('progressWrap').classList.add('active');
+  updateProgress(0, records.length, '正在批量检测…');
+  renderTable();
+  try {
+    const r = await fetch('/api/check-records/check-validity', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({record_ids: records.map(x=>x.id)})});
+    const d = await r.json();
+    if(d.error) showToast('检测失败: '+d.error, 'error');
+    else { await loadRecords(); updateProgress(records.length, records.length, '检测完成'); showToast(`检测完成: ${d.valid_count} 有效, ${d.invalid_count} 失效`, d.invalid_count>0?'warning':'success'); }
+  } catch(e) { showToast('批量检测失败: '+e.message, 'error'); updateProgress(0, records.length, '检测失败'); }
+  state.checking = false;
+  document.getElementById('startCheckBtn').disabled = false;
+  updateStats(); renderTable();
+}
+
+// Single Check
+async function checkOne(id) {
+  const r = state.records.find(x=>x.id===id); if(!r) return;
+  const btn = event.target.closest('.action-btn');
+  if(btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    const resp = await fetch('/api/check-records/check-validity-one', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({record_id: id})});
+    const d = await resp.json();
+    if(d.error) showToast('检测失败: '+d.error, 'error');
+    else await loadRecords();
+  } catch(e) { showToast('检测失败: '+e.message, 'error'); }
+  updateStats(); renderTable();
+}
+
+function updateProgress(current, total, text) {
+  const pct = total>0 ? Math.round(current/total*100) : 0;
+  document.getElementById('progressBar').style.width = pct+'%';
+  document.getElementById('progressText').textContent = text;
+  document.getElementById('progressDetail').textContent = `${current} / ${total}`;
+}
+
+// Reason popup
+let _hp=null, _ht=null;
+function showReason(el) {
+  clearTimeout(_ht);
+  const reason = el.getAttribute('data-reason'); if(!reason) return;
+  if(_hp) { _hp.remove(); _hp=null; }
+  const p = document.createElement('div'); p.className='reason-popup'; p.textContent=reason;
+  document.body.appendChild(p); _hp=p;
+  const ir=el.getBoundingClientRect();
+  p.style.top=(ir.bottom+6)+'px'; p.style.left=(ir.left+ir.width/2)+'px';
+}
+function hideReason() { _ht=setTimeout(()=>{ if(_hp){ _hp.remove(); _hp=null; } }, 150); }
+
+function copyText(text, el) {
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('已复制', 'success');
+    if(el && el.classList.contains('pwd-tag')) { el.style.transform='scale(1.1)'; setTimeout(()=>el.style.transform='', 200); }
+  }).catch(()=>showToast('复制失败', 'error'));
+}
+function copyLinkOnly(url, btn) {
+  navigator.clipboard.writeText(url).then(() => { btn.textContent='已复制'; btn.classList.add('copied'); setTimeout(()=>{btn.textContent='复制'; btn.classList.remove('copied');},1500); }).catch(()=>showToast('复制失败','error'));
+}
+
+async function loadRecords() {
+  state.records = await fetchCheckRecords();
+  // 默认全选所有账号和状态
+  state.accountFilter = new Set([...new Set(state.records.map(x => (x.source||'').split(':').slice(1).join(':') || '(无账号)'))]);
+  state.statusFilter = new Set(['valid', 'invalid', 'pending']);
+  updateStats(); renderTable();
+}
+
+async function init() {
+  try {
+    const r = await fetch('/api/settings?key=theme');
+    const d = await r.json();
+    if(d.value) { await applyTheme(d.value); localStorage.setItem('check_theme', d.value); }
+  } catch(e) {}
+  await loadRecords();
+}
+init();
+</script>
+</body>
+</html>
