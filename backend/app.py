@@ -1348,6 +1348,65 @@ def check_one_record_validity():
     })
 
 
+# ─── 失效标识：将失效检测结果同步到主页数据 ────────────────
+@app.route('/api/check-records/mark-invalid-shares', methods=['POST'])
+def mark_invalid_shares():
+    """将检测失效的记录标记到主页分享数据：添加'失效'标签和失效原因备注"""
+    conn = get_conn()
+    records = conn.execute(
+        "SELECT url, check_reason FROM check_records WHERE check_valid = 0"
+    ).fetchall()
+
+    marked = 0  # 在主页数据中找到并处理的记录
+    not_found = 0  # 在主页数据中未找到匹配的记录
+    for rec in records:
+        share = conn.execute(
+            "SELECT id, tags, notes FROM shares WHERE url = ? AND is_deleted = 0",
+            (rec['url'],)
+        ).fetchone()
+        if not share:
+            not_found += 1
+            continue
+
+        updates = {}
+        updated_at_needed = False
+
+        # 添加"失效"标签（去重）
+        existing_tags = [t.strip() for t in (share['tags'] or '').split(',') if t.strip()]
+        if '失效' not in existing_tags:
+            existing_tags.append('失效')
+            updates['tags'] = ','.join(existing_tags)
+            updated_at_needed = True
+
+        # 添加失效原因到备注（去重）
+        if rec['check_reason']:
+            reason_text = f"[失效原因] {rec['check_reason']}"
+            existing_notes = (share['notes'] or '').strip()
+            if reason_text not in existing_notes:
+                if existing_notes:
+                    updates['notes'] = existing_notes + '\n' + reason_text
+                else:
+                    updates['notes'] = reason_text
+                updated_at_needed = True
+
+        if updates:
+            set_parts = [f"{k}=?" for k in updates]
+            if updated_at_needed:
+                set_parts.append("updated_at=datetime('now','localtime')")
+            set_clause = ', '.join(set_parts)
+            conn.execute(
+                f"UPDATE shares SET {set_clause} WHERE id=?",
+                list(updates.values()) + [share['id']]
+            )
+
+        marked += 1
+
+    conn.commit()
+    conn.close()
+    log.info(f'失效标识: 已标记 {marked} 条, {not_found} 条不在分享数据中')
+    return jsonify({'success': True, 'marked': marked, 'not_found': not_found})
+
+
 # ── 启动入口 ─────────────────────────────────────────────
 if __name__ == '__main__':
     # 单实例保护 + PID 文件写入

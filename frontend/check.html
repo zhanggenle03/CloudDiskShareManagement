@@ -104,6 +104,19 @@
                font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
   .nav-badge.primary { background: var(--primary); color: #fff; }
 
+  /* Nav dropdown */
+  .nav-dropdown { position: relative; }
+  .nav-dropdown-trigger { user-select: none; }
+  .dropdown-arrow { margin-left: auto; font-size: 10px; transition: transform .15s; }
+  .nav-dropdown.open .dropdown-arrow { transform: rotate(180deg); }
+  .nav-dropdown-menu { padding: 4px 0; margin: 2px 0 0 8px; border-radius: 8px;
+                       background: var(--bg-card); border: 1px solid var(--border);
+                       box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+  .nav-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+                       border-radius: 6px; cursor: pointer; color: var(--gray-600);
+                       font-size: 13px; transition: all .12s; }
+  .nav-dropdown-item:hover { background: var(--gray-100); color: var(--gray-800); }
+
   .sidebar-bottom { margin-top: auto; padding: 10px; border-top: 1px solid var(--gray-100); display: none; }
 
   .topbar { background: var(--bg-card); border-bottom: 1px solid var(--border);
@@ -345,15 +358,26 @@
 
     <div class="nav-section">
       <div class="nav-label">操作</div>
-      <div class="nav-item" onclick="document.getElementById('csvFileInput').click()" style="cursor:pointer;">
-        <span class="icon">📥</span> 导入CSV
+      <div class="nav-dropdown" id="importDropdown">
+        <div class="nav-item nav-dropdown-trigger" onclick="toggleImportDropdown()">
+          <span class="icon">📥</span> 数据导入
+          <span class="dropdown-arrow" id="importDropdownArrow">▾</span>
+        </div>
+        <div class="nav-dropdown-menu" id="importDropdownMenu" style="display:none;">
+          <div class="nav-dropdown-item" onclick="document.getElementById('csvFileInput').click(); closeImportDropdown();">
+            <span class="icon">📄</span> CSV导入
+          </div>
+          <div class="nav-dropdown-item" onclick="showAddRecordDialog(); closeImportDropdown();">
+            <span class="icon">➕</span> 手动添加
+          </div>
+          <div class="nav-dropdown-item" onclick="importFromShares(); closeImportDropdown();">
+            <span class="icon">📋</span> 主页数据
+          </div>
+        </div>
       </div>
       <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="importCsv(this)">
-      <div class="nav-item" onclick="showAddRecordDialog()" style="cursor:pointer;">
-        <span class="icon">➕</span> 手动添加
-      </div>
-      <div class="nav-item" onclick="importFromShares()" style="cursor:pointer;">
-        <span class="icon">📋</span> 导入主页数据
+      <div class="nav-item" onclick="markInvalidShares()" style="cursor:pointer;">
+        <span class="icon">🏷️</span> 失效标识
       </div>
     </div>
 
@@ -443,6 +467,23 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeDeleteConfirm()">取消</button>
       <button class="btn btn-danger" onclick="submitDelete()" style="background:var(--danger);color:#fff;">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 失效标识确认对话框 -->
+<div class="modal-overlay" id="markInvalidModal" style="display:none;" onclick="closeMarkInvalid(event)">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span>🏷️ 失效标识</span>
+      <span class="modal-close" onclick="closeMarkInvalid()">✕</span>
+    </div>
+    <div class="modal-body" style="font-size:14px;line-height:1.6;">
+      <p id="markInvalidText"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeMarkInvalid()">取消</button>
+      <button class="btn btn-primary" onclick="submitMarkInvalid()">确认标记</button>
     </div>
   </div>
 </div>
@@ -806,6 +847,36 @@ async function importFromShares() {
   } catch(e) { showToast('导入失败: '+e.message, 'error'); }
 }
 
+// Mark Invalid Shares
+let _markInvalidConfirmed = false;
+
+function markInvalidShares() {
+  const invalid = state.records.filter(x => x.check_valid === 0);
+  if(invalid.length === 0) { showToast('暂无失效的记录', 'info'); return; }
+  document.getElementById('markInvalidText').textContent =
+    `将 ${invalid.length} 条失效检测记录标记到主页数据，添加"失效"标签和失效原因？`;
+  document.getElementById('markInvalidModal').style.display = 'flex';
+}
+
+function closeMarkInvalid(e) {
+  if(e && e.target !== e.currentTarget) return;
+  document.getElementById('markInvalidModal').style.display = 'none';
+}
+
+async function submitMarkInvalid() {
+  document.getElementById('markInvalidModal').style.display = 'none';
+  try {
+    const r = await fetch('/api/check-records/mark-invalid-shares', {method:'POST'});
+    const d = await r.json();
+    if(d.error) showToast('操作失败: '+d.error, 'error');
+    else {
+      let msg = `已标识 ${d.marked} 条`;
+      if(d.not_found > 0) msg += `，${d.not_found} 条不在分享数据中，未标识`;
+      showToast(msg, 'success');
+    }
+  } catch(e) { showToast('操作失败: '+e.message, 'error'); }
+}
+
 // Delete Confirm
 let _deleteIds = [];
 
@@ -898,6 +969,33 @@ function copyText(text, el) {
 function copyLinkOnly(url, btn) {
   navigator.clipboard.writeText(url).then(() => { btn.textContent='已复制'; btn.classList.add('copied'); setTimeout(()=>{btn.textContent='复制'; btn.classList.remove('copied');},1500); }).catch(()=>showToast('复制失败','error'));
 }
+
+// ── 导入下拉菜单 ──
+function toggleImportDropdown() {
+  const dropdown = document.getElementById('importDropdown');
+  const menu = document.getElementById('importDropdownMenu');
+  const isOpen = menu.style.display === 'block';
+  if (isOpen) {
+    closeImportDropdown();
+  } else {
+    dropdown.classList.add('open');
+    menu.style.display = 'block';
+  }
+}
+
+function closeImportDropdown() {
+  const dropdown = document.getElementById('importDropdown');
+  const menu = document.getElementById('importDropdownMenu');
+  if (dropdown) dropdown.classList.remove('open');
+  if (menu) menu.style.display = 'none';
+}
+
+document.addEventListener('click', (e) => {
+  const dropdown = document.getElementById('importDropdown');
+  if (dropdown && !dropdown.contains(e.target)) {
+    closeImportDropdown();
+  }
+});
 
 async function loadRecords() {
   state.records = await fetchCheckRecords();
