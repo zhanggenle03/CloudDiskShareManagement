@@ -94,12 +94,15 @@
   .nav-section { padding: 12px 10px 4px; }
   .nav-label { font-size: 11px; color: var(--gray-400); text-transform: uppercase;
                letter-spacing: .6px; padding: 0 10px 6px; font-weight: 600; }
-  .nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px;
               border-radius: 8px; cursor: pointer; color: var(--gray-600);
               font-size: 13.5px; transition: all .15s; text-decoration: none; }
   .nav-item:hover { background: var(--gray-100); color: var(--gray-800); }
   .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
   .nav-item .icon { width: 18px; text-align: center; }
+  .platform-grid { display: flex; flex-wrap: wrap; gap: 2px; }
+  .platform-grid .platform-item { width: calc(50% - 1px); padding: 6px 10px; box-sizing: border-box; }
+  .platform-grid .platform-item .nav-badge { font-size: 10px; padding: 1px 5px; }
   .nav-badge { margin-left: auto; background: var(--gray-200); color: var(--gray-600);
                font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
   .nav-badge.primary { background: var(--primary); color: #fff; }
@@ -112,7 +115,7 @@
   .nav-dropdown-menu { padding: 4px 0; margin: 2px 0 0 8px; border-radius: 8px;
                        background: var(--bg-card); border: 1px solid var(--border);
                        box-shadow: 0 4px 12px rgba(0,0,0,.1); }
-  .nav-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  .nav-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px;
                        border-radius: 6px; cursor: pointer; color: var(--gray-600);
                        font-size: 13px; transition: all .12s; }
   .nav-dropdown-item:hover { background: var(--gray-100); color: var(--gray-800); }
@@ -338,21 +341,23 @@
 
     <div class="nav-section">
       <div class="nav-label">平台筛选</div>
-      <div class="nav-item active" data-source="all" onclick="setSourceFilter('all', this)">
-        <span class="icon">🗂</span> 全部
-        <span class="nav-badge primary" id="navAll">0</span>
-      </div>
-      <div class="nav-item" data-source="baidu" onclick="setSourceFilter('baidu', this)">
-        <span class="icon">🔵</span> 百度网盘
-        <span class="nav-badge" id="navBaidu">0</span>
-      </div>
-      <div class="nav-item" data-source="quark" onclick="setSourceFilter('quark', this)">
-        <span class="icon">🟣</span> 夸克网盘
-        <span class="nav-badge" id="navQuark">0</span>
-      </div>
-      <div class="nav-item" data-source="uc" onclick="setSourceFilter('uc', this)">
-        <span class="icon">🟠</span> UC网盘
-        <span class="nav-badge" id="navUc">0</span>
+      <div class="platform-grid">
+        <div class="nav-item platform-item active" data-source="all" onclick="setSourceFilter('all', this)">
+          <span class="icon">🗂</span> 全部
+          <span class="nav-badge primary" id="navAll">0</span>
+        </div>
+        <div class="nav-item platform-item" data-source="baidu" onclick="setSourceFilter('baidu', this)">
+          <span class="icon">🔵</span> 百度
+          <span class="nav-badge" id="navBaidu">0</span>
+        </div>
+        <div class="nav-item platform-item" data-source="quark" onclick="setSourceFilter('quark', this)">
+          <span class="icon">🟣</span> 夸克
+          <span class="nav-badge" id="navQuark">0</span>
+        </div>
+        <div class="nav-item platform-item" data-source="uc" onclick="setSourceFilter('uc', this)">
+          <span class="icon">🟠</span> UC
+          <span class="nav-badge" id="navUc">0</span>
+        </div>
       </div>
     </div>
 

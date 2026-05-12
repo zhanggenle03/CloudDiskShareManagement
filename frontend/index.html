@@ -86,12 +86,15 @@
   .add-tag-btn { cursor: pointer; font-size: 14px; color: var(--gray-400); transition: color .15s; user-select: none; line-height: 1; }
   .add-tag-btn:hover { color: var(--primary); }
   body[data-view="folder"] .add-tag-btn { display: none; }
-  .nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  .nav-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px;
               border-radius: 8px; cursor: pointer; color: var(--gray-600);
               font-size: 13.5px; transition: all .15s; }
   .nav-item:hover { background: var(--gray-100); color: var(--gray-800); }
   .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
   .nav-item .icon { width: 18px; text-align: center; }
+  .platform-grid { display: flex; flex-wrap: wrap; gap: 2px; }
+  .platform-grid .platform-item { width: calc(50% - 1px); padding: 6px 10px; box-sizing: border-box; }
+  .platform-grid .platform-item .badge { font-size: 10px; padding: 1px 5px; }
   .badge { margin-left: auto; background: var(--gray-200); color: var(--gray-600);
            font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
 
@@ -103,7 +106,7 @@
   .nav-dropdown-menu { padding: 4px 0; margin: 2px 0 0 8px; border-radius: 8px;
                        background: var(--bg-card); border: 1px solid var(--border);
                        box-shadow: 0 4px 12px rgba(0,0,0,.1); }
-  .nav-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  .nav-dropdown-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px;
                        border-radius: 6px; cursor: pointer; color: var(--gray-600);
                        font-size: 13px; transition: all .12s; }
   .nav-dropdown-item:hover { background: var(--gray-100); color: var(--gray-800); }
@@ -388,14 +391,14 @@
                 overflow: visible; }
   .table-view.hidden { display: none; }
   .table-view table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
-  .table-view thead th { background: var(--gray-50); padding: 10px 12px; text-align: left;
+  .table-view thead th { background: var(--gray-50); padding: 6px 12px; text-align: left;
                          font-weight: 600; color: var(--gray-600); border-bottom: 2px solid var(--gray-200);
                          white-space: nowrap; position: sticky; top: 0; z-index: 1; }
   .table-view tbody tr { transition: background .12s; }
   .table-view tbody tr:hover { background: var(--primary-light); }
   .table-view tbody tr.expired td:not(.td-actions) { opacity: .55; }
   .table-view tbody tr.selected { background: var(--primary-light); }
-  .table-view tbody td { padding: 10px 12px; border-bottom: 1px solid var(--gray-100);
+  .table-view tbody td { padding: 6px 12px; border-bottom: 1px solid var(--gray-100);
                           vertical-align: middle; }
   .table-view .td-check { text-align: center; }
   .table-view .td-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -407,7 +410,7 @@
   .table-view .td-url .copy-btn { flex-shrink: 0; }
   .table-view .td-meta { white-space: nowrap; text-align: center; overflow: hidden; text-overflow: ellipsis; }
   .table-view .td-time { min-width: 148px; overflow: visible; text-overflow: unset; white-space: nowrap; }
-  .table-view .td-tags { display: flex; align-items: center; overflow: visible; padding: 6px 0; gap: 3px; }
+  .table-view .td-tags { display: flex; align-items: center; overflow: visible; padding: 3px 0; gap: 3px; }
   .tags-wrap { display: flex; align-items: center; flex: 1; min-width: 0;
                overflow-x: auto; overflow-y: hidden;
                scrollbar-width: none; /* Firefox 隐藏滚动条 */
@@ -608,21 +611,23 @@
 
     <div class="nav-section">
       <div class="nav-label">平台</div>
-      <div class="nav-item active" data-source="all" onclick="setSource('all', this)">
-        <span class="icon">🗂</span> 全部
-        <span class="badge primary" id="navAll">0</span>
-      </div>
-      <div class="nav-item" data-source="baidu" onclick="setSource('baidu', this)">
-        <span class="icon">🔵</span> 百度网盘
-        <span class="badge" id="navBaidu">0</span>
-      </div>
-      <div class="nav-item" data-source="quark" onclick="setSource('quark', this)">
-        <span class="icon">🟣</span> 夸克网盘
-        <span class="badge" id="navQuark">0</span>
-      </div>
-      <div class="nav-item" data-source="uc" onclick="setSource('uc', this)">
-        <span class="icon">🟠</span> UC网盘
-        <span class="badge" id="navUc">0</span>
+      <div class="platform-grid">
+        <div class="nav-item platform-item active" data-source="all" onclick="setSource('all', this)">
+          <span class="icon">🗂</span> 全部
+          <span class="badge primary" id="navAll">0</span>
+        </div>
+        <div class="nav-item platform-item" data-source="baidu" onclick="setSource('baidu', this)">
+          <span class="icon">🔵</span> 百度
+          <span class="badge" id="navBaidu">0</span>
+        </div>
+        <div class="nav-item platform-item" data-source="quark" onclick="setSource('quark', this)">
+          <span class="icon">🟣</span> 夸克
+          <span class="badge" id="navQuark">0</span>
+        </div>
+        <div class="nav-item platform-item" data-source="uc" onclick="setSource('uc', this)">
+          <span class="icon">🟠</span> UC
+          <span class="badge" id="navUc">0</span>
+        </div>
       </div>
     </div>
 
@@ -1677,6 +1682,10 @@ function copyShare(name, url, pwd, btn) {
 
 // ── Load & Render ─────────────────────────────────────────
 async function loadShares() {
+  // 保存当前滚动位置
+  const scrollArea = document.querySelector('.data-scroll-area');
+  const savedScrollTop = scrollArea ? scrollArea.scrollTop : 0;
+
   const cardsGrid = document.getElementById('cardsGrid');
   const tableBody = document.getElementById('tableBody');
   const tableView = document.getElementById('tableView');
@@ -1756,6 +1765,14 @@ async function loadShares() {
     initTagsButtons();
   }
   renderPagination(data.total);
+
+  // 恢复滚动位置
+  if (savedScrollTop > 0) {
+    setTimeout(() => {
+      const sa = document.querySelector('.data-scroll-area');
+      if (sa) sa.scrollTop = savedScrollTop;
+    }, 0);
+  }
 }
 
 function renderCard(item) {
