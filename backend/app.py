@@ -409,11 +409,14 @@ def stats():
             source=source, expire_filter=expire_filter,
             keyword=keyword, tag=tag, account_ids=account_ids
         )
-        # 为标签补充颜色
+        # 为标签补充颜色（包含所有已有颜色的标签，确保前端颜色不丢失）
         colors = get_all_tag_colors()
         colored_tags = {}
         for t, cnt in filtered.get('tags', {}).items():
             colored_tags[t] = {'count': cnt, 'color': colors.get(t, '')}
+        for t, c in colors.items():
+            if t not in colored_tags:
+                colored_tags[t] = {'count': 0, 'color': c}
         filtered['tags'] = colored_tags
         filtered['filtered'] = True
         return jsonify(filtered)

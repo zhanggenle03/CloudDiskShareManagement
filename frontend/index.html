@@ -2495,15 +2495,16 @@ function getFilterLabel() {
 }
 
 async function loadStats() {
+  // 注意：state.tag 不参与 hasFilter，保证标签列表稳定不消失
   const hasFilter = (state.source && state.source !== 'all')
-    || state.expire || state.keyword || state.tag
+    || state.expire || state.keyword
     || (state.accountFilter && state.accountFilter.length > 0);
 
   // 构建请求参数（无筛选时走全量接口缓存路径）
+  // 注意：不传 tag 参数，保证标签列表始终显示全量标签
   const params = new URLSearchParams({ source: state.source || 'all' });
   if (state.expire) params.set('expire', state.expire);
   if (state.keyword) params.set('keyword', state.keyword);
-  if (state.tag) params.set('tag', state.tag);
   if (state.accountFilter && state.accountFilter.length > 0) {
     params.set('account_ids', JSON.stringify(state.accountFilter));
   }
@@ -2537,10 +2538,11 @@ async function loadStats() {
   });
 
   // 更新标签颜色缓存（所有视图共享）
+  // 保留已有颜色+API返回的颜色，确保筛选后颜色不丢失
   if (shareStats.tags) {
-    const colorMap = {};
+    const colorMap = { ...state.tagColors };
     for (const [tag, info] of Object.entries(shareStats.tags)) {
-      colorMap[tag] = info.color || '';
+      if (info.color) colorMap[tag] = info.color;
     }
     state.tagColors = colorMap;
   }
@@ -2569,11 +2571,9 @@ async function loadStats() {
     return;
   }
 
-  // 非文件夹视图：渲染侧边栏标签
+  // 非文件夹视图：渲染侧边栏标签（始终全量，不因选中标签而减少）
   const s = shareStats;
   const tagsEl = document.getElementById('tagsList');
-  // 无筛选时展示全量标签（含 count=0 的新建标签）；有筛选时只展示筛选范围内的标签
-  const tagsSource = hasFilter ? s.tags : s.tags;
   if (s.tags && Object.keys(s.tags).length > 0) {
     tagsEl.innerHTML = Object.entries(s.tags)
       .filter(([, info]) => !hasFilter || info.count > 0)
@@ -3345,7 +3345,8 @@ async function doBatchTag() {
 
   toast(`已为 ${state.selected.size} 条添加标签「${tag}」`, 'success');
   closeModal('batchTagModal');
-  loadShares(); loadStats();
+  await loadShares();
+  await loadStats();
 }
 
 // ── Tags slide buttons ──────────────────────────────────
