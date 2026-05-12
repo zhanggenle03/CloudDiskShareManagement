@@ -202,9 +202,11 @@
                  padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
   .check-badge.valid { background: rgba(16,185,129,.15); color: var(--success); }
   .check-badge.invalid { background: rgba(239,68,68,.15); color: var(--danger); }
+  .check-badge.rate_limited { background: rgba(245,158,11,.15); color: var(--warning); }
   .check-badge.pending { background: var(--gray-100); color: var(--text-muted); }
   [data-theme="dark"] .check-badge.valid { background: #064E3B; color: #6EE7B7; }
   [data-theme="dark"] .check-badge.invalid { background: #450A0A; color: #FCA5A5; }
+  [data-theme="dark"] .check-badge.rate_limited { background: #451A03; color: #FBBF24; }
   [data-theme="dark"] .check-badge.pending { background: #374151; color: #9CA3AF; }
   .reason-text { font-size: 11px; color: var(--text-muted); margin-top: 2px;
                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -336,6 +338,10 @@
           <div class="val" id="statPending">--</div>
           <div class="lbl">待检</div>
         </div>
+        <div class="stat-chip">
+          <div class="val" id="statRateLimited">--</div>
+          <div class="lbl">限流</div>
+        </div>
       </div>
     </div>
 
@@ -406,6 +412,7 @@
         <button class="btn btn-danger" id="deleteSelectedBtn" onclick="deleteSelected()" style="display:none">🗑️ 删除</button>
         <span style="flex:1"></span>
         <button class="btn btn-primary" id="startCheckBtn" onclick="startCheck()">▶ 开始检测</button>
+        <button class="btn btn-ghost" onclick="showCheckSettings()" title="检测设置" style="margin-left:6px;padding:6px 10px;font-size:16px;">⚙️</button>
       </div>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-bar-bg">
@@ -413,7 +420,6 @@
         </div>
         <div class="progress-info">
           <span id="progressText">准备中…</span>
-          <span id="progressDetail">0 / 0</span>
         </div>
       </div>
 
@@ -588,6 +594,7 @@ function getVisibleRecords() {
 
 function statusKey(x) {
   if (x.check_valid === 1) return 'valid';
+  if (x.is_rate_limited === 1 || x.is_rate_limited === true) return 'rate_limited';
   if (x.check_valid === 0) return 'invalid';
   return 'pending';
 }
@@ -607,8 +614,9 @@ function renderTable() {
 
   tbody.innerHTML = records.map(r => {
     const cv = r.check_valid;
-    const status = cv === 1 ? 'valid' : (cv === 0 ? 'invalid' : 'pending');
-    const st = cv === 1 ? '✅ 有效' : (cv === 0 ? '❌ 失效' : '⏳ 待检测');
+    const isLimited = r.is_rate_limited === 1 || r.is_rate_limited === true;
+    const status = isLimited ? 'rate_limited' : (cv === 1 ? 'valid' : (cv === 0 ? 'invalid' : 'pending'));
+    const st = isLimited ? '⚠️ 限流' : (cv === 1 ? '✅ 有效' : (cv === 0 ? '❌ 失效' : '⏳ 待检测'));
     const reason = r.check_reason || '';
     const dur = r.check_duration || 0;
     const srcParts = (r.source || '').split(':');
@@ -639,8 +647,9 @@ function updateStats() {
   if (state.sourceFilter !== 'all') r = r.filter(x => (x.source||'').startsWith(state.sourceFilter));
   document.getElementById('statTotal').textContent = r.length;
   document.getElementById('statValid').textContent = r.filter(x=>x.check_valid===1).length;
-  document.getElementById('statInvalid').textContent = r.filter(x=>x.check_valid===0).length;
+  document.getElementById('statInvalid').textContent = r.filter(x=>x.check_valid===0 && !(x.is_rate_limited===1||x.is_rate_limited===true)).length;
   document.getElementById('statPending').textContent = r.length - r.filter(x=>x.check_valid!==null).length;
+  document.getElementById('statRateLimited').textContent = r.filter(x=>x.is_rate_limited===1||x.is_rate_limited===true).length;
   document.getElementById('navAll').textContent = state.records.length;
   document.getElementById('navBaidu').textContent = state.records.filter(x=>(x.source||'').startsWith('baidu')).length;
   document.getElementById('navQuark').textContent = state.records.filter(x=>(x.source||'').startsWith('quark')).length;
@@ -697,9 +706,9 @@ function toggleAccountDropdown(e) {
 function getFilteredAccounts() {
   let r = state.records;
   if (state.sourceFilter !== 'all') r = r.filter(x => (x.source||'').startsWith(state.sourceFilter));
-  const allSt = ['valid','invalid','pending'];
+  const allSt = ['valid','invalid','pending','rate_limited'];
   if (!allSt.every(s => state.statusFilter.has(s))) {
-    r = r.filter(x => state.statusFilter.has(x.check_valid===1?'valid':x.check_valid===0?'invalid':'pending'));
+    r = r.filter(x => state.statusFilter.has(statusKey(x)));
   }
   const counts = {};
   r.forEach(x => { const a = (x.source||'').split(':').slice(1).join(':') || '(无账号)'; counts[a] = (counts[a]||0) + 1; });
@@ -714,7 +723,7 @@ function getFilteredStatuses() {
     r = r.filter(x => state.accountFilter.has((x.source||'').split(':').slice(1).join(':') || '(无账号)'));
   }
   const counts = {};
-  r.forEach(x => { const s = x.check_valid===1?'valid':x.check_valid===0?'invalid':'pending'; counts[s] = (counts[s]||0) + 1; });
+  r.forEach(x => { const s = statusKey(x); counts[s] = (counts[s]||0) + 1; });
   return Object.entries(counts).map(([k,v]) => ({value:k, count:v}));
 }
 
@@ -911,23 +920,51 @@ async function submitDelete() {
   } catch(e) { showToast('删除失败: '+e.message, 'error'); }
 }
 
-// Batch Check
+// Batch Check (并发逐条检测，实时进度)
 async function startCheck() {
   const records = getVisibleRecords();
   if(records.length===0) { showToast('没有可检测的记录', 'info'); return; }
   state.checking = true;
   document.getElementById('startCheckBtn').disabled = true;
   document.getElementById('progressWrap').classList.add('active');
-  updateProgress(0, records.length, '正在批量检测…');
+
+  const CONCURRENCY = 5; // 同时跑几条
+  let done = 0, valid = 0, invalid = 0, rateLimited = 0;
+
+  updateProgress(0, records.length, '正在准备检测…');
   renderTable();
-  try {
-    const r = await fetch('/api/check-records/check-validity', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({record_ids: records.map(x=>x.id)})});
-    const d = await r.json();
-    if(d.error) showToast('检测失败: '+d.error, 'error');
-    else { await loadRecords(); updateProgress(records.length, records.length, '检测完成'); showToast(`检测完成: ${d.valid_count} 有效, ${d.invalid_count} 失效`, d.invalid_count>0?'warning':'success'); }
-  } catch(e) { showToast('批量检测失败: '+e.message, 'error'); updateProgress(0, records.length, '检测失败'); }
+
+  // 按 CONCURRENCY 条一组依次走
+  for (let i = 0; i < records.length; i += CONCURRENCY) {
+    const batch = records.slice(i, i + CONCURRENCY);
+    const promises = batch.map(r =>
+      fetch('/api/check-records/check-validity-one', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({record_id: r.id})
+      }).then(res => res.json())
+       .then(d => {
+         done++;
+         if (d.valid) valid++;
+         else invalid++;
+         if (d.is_rate_limited) rateLimited++;
+         updateProgress(done, records.length, `已检测 ${done}/${records.length} 条`);
+         return d;
+       })
+    );
+
+    await Promise.all(promises);
+  }
+
+  await loadRecords();
+  updateProgress(records.length, records.length, '检测完成');
+  let toastMsg = `检测完成: ${valid} 有效, ${invalid} 失效`;
+  if (rateLimited > 0) toastMsg += `, ${rateLimited} 条被限流`;
+  showToast(toastMsg, invalid > 0 ? 'warning' : 'success');
+
   state.checking = false;
   document.getElementById('startCheckBtn').disabled = false;
+  document.getElementById('progressWrap').classList.remove('active');
   updateStats(); renderTable();
 }
 
@@ -949,7 +986,6 @@ function updateProgress(current, total, text) {
   const pct = total>0 ? Math.round(current/total*100) : 0;
   document.getElementById('progressBar').style.width = pct+'%';
   document.getElementById('progressText').textContent = text;
-  document.getElementById('progressDetail').textContent = `${current} / ${total}`;
 }
 
 // Reason popup
@@ -1006,7 +1042,7 @@ async function loadRecords() {
   state.records = await fetchCheckRecords();
   // 默认全选所有账号和状态
   state.accountFilter = new Set([...new Set(state.records.map(x => (x.source||'').split(':').slice(1).join(':') || '(无账号)'))]);
-  state.statusFilter = new Set(['valid', 'invalid', 'pending']);
+  state.statusFilter = new Set(['valid', 'invalid', 'pending', 'rate_limited']);
   updateStats(); renderTable();
 }
 
@@ -1018,7 +1054,317 @@ async function init() {
   } catch(e) {}
   await loadRecords();
 }
+
+// ── 检测设置弹窗 ──
+const SPEED_PRESETS = {
+  conservative: {
+    label: '🐢 保守', desc: '极慢，几乎不被限流',
+    check_baidu_threads: 2, check_baidu_rate: 0.3,
+    check_quark_threads: 2, check_quark_rate: 0.5,
+    check_uc_threads: 2, check_uc_rate: 0.5,
+    check_retry_count: 2,
+    check_baidu_cooldown: 30,
+  },
+  standard: {
+    label: '🐇 标准', desc: '日常使用，兼顾速度和稳定性',
+    check_baidu_threads: 5, check_baidu_rate: 1.0,
+    check_quark_threads: 5, check_quark_rate: 2.0,
+    check_uc_threads: 5, check_uc_rate: 1.5,
+    check_retry_count: 2,
+    check_baidu_cooldown: 15,
+  },
+  fast: {
+    label: '🚀 快速', desc: '全力冲刺，适合少量链接快速检测',
+    check_baidu_threads: 10, check_baidu_rate: 3.0,
+    check_quark_threads: 10, check_quark_rate: 5.0,
+    check_uc_threads: 10, check_uc_rate: 4.0,
+    check_retry_count: 2,
+    check_baidu_cooldown: 15,
+  },
+};
+
+function detectSpeedPreset(settings) {
+  for (const [key, preset] of Object.entries(SPEED_PRESETS)) {
+    let match = true;
+    for (const [k, v] of Object.entries(preset)) {
+      if (k === 'label' || k === 'desc') continue;
+      if (String(settings[k] ?? '') !== String(v)) { match = false; break; }
+    }
+    if (match) return key;
+  }
+  return null; // 自定义
+}
+
+async function showCheckSettings() {
+  // 获取当前设置
+  const settings = {};
+  const keys = [
+    'check_baidu_threads', 'check_baidu_rate',
+    'check_quark_threads', 'check_quark_rate',
+    'check_uc_threads', 'check_uc_rate',
+    'check_retry_count', 'check_baidu_cooldown',
+  ];
+  for (const k of keys) {
+    try {
+      const r = await fetch(`/api/settings/${k}?default=`);
+      const d = await r.json();
+      settings[k] = d.value;
+    } catch(e) {}
+  }
+
+  const currentPreset = detectSpeedPreset(settings);
+  const retryCount = settings.check_retry_count || '2';
+  const cooldown = settings.check_baidu_cooldown || '15';
+
+  const modal = document.getElementById('checkSettingsModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  const body = modal.querySelector('.modal-body');
+
+  // 构建预设按钮 HTML
+  let presetBtns = '';
+  for (const [key, p] of Object.entries(SPEED_PRESETS)) {
+    const active = currentPreset === key;
+    presetBtns += `
+      <div class="speed-card ${active ? 'active' : ''}" data-preset="${key}" onclick="selectSpeedPreset('${key}')">
+        <div class="speed-card-label">${p.label}</div>
+        <div class="speed-card-desc">${p.desc}</div>
+      </div>`;
+  }
+
+  body.innerHTML = `
+    <div class="setting-group">
+      <div class="setting-title">⚡ 检测速度</div>
+      <div class="speed-grid">${presetBtns}</div>
+      <div style="font-size:11px;color:var(--gray-400);margin-top:6px;text-align:center;">
+        ${currentPreset ? `当前：${SPEED_PRESETS[currentPreset].label.replace(/^.. /, '')}` : '当前：自定义配置'}
+        ${!currentPreset ? '<span style="color:var(--warning);">（预设置将覆盖自定义值）</span>' : '也可展开下方单独调每个平台'}
+      </div>
+      <input type="hidden" id="s_speedPreset" value="${currentPreset || ''}">
+    </div>
+    <div class="setting-group">
+      <div class="setting-title" style="cursor:pointer;" onclick="toggleAdvanced()">
+        🔧 高级设置 <span id="advancedToggle" style="font-size:11px;font-weight:400;color:var(--gray-400);">展开 ▼</span>
+      </div>
+      <div id="advancedSection" style="display:none;">
+        <div class="platform-adv">
+          <div class="platform-adv-title">🔵 百度网盘</div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <label>线程数</label>
+              <span class="setting-desc">同时几个请求排队</span>
+            </div>
+            <input type="number" id="s_baidu_threads" value="${settings.check_baidu_threads || '5'}" min="1" max="20" onchange="onCustomChange()">
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <label>每秒速率</label>
+              <span class="setting-desc">每秒放行几个请求</span>
+            </div>
+            <input type="number" id="s_baidu_rate" value="${settings.check_baidu_rate || '1.0'}" min="0.1" max="10" step="0.1" onchange="onCustomChange()">
+          </div>
+        </div>
+        <div class="platform-adv">
+          <div class="platform-adv-title">🟣 夸克网盘</div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <label>线程数</label>
+              <span class="setting-desc">同时几个请求排队</span>
+            </div>
+            <input type="number" id="s_quark_threads" value="${settings.check_quark_threads || '5'}" min="1" max="20" onchange="onCustomChange()">
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <label>每秒速率</label>
+              <span class="setting-desc">每秒放行几个请求</span>
+            </div>
+            <input type="number" id="s_quark_rate" value="${settings.check_quark_rate || '2.0'}" min="0.1" max="10" step="0.1" onchange="onCustomChange()">
+          </div>
+        </div>
+        <div class="platform-adv">
+          <div class="platform-adv-title">🟠 UC网盘</div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <label>线程数</label>
+              <span class="setting-desc">同时几个请求排队</span>
+            </div>
+            <input type="number" id="s_uc_threads" value="${settings.check_uc_threads || '5'}" min="1" max="20" onchange="onCustomChange()">
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">
+              <label>每秒速率</label>
+              <span class="setting-desc">每秒放行几个请求</span>
+            </div>
+            <input type="number" id="s_uc_rate" value="${settings.check_uc_rate || '1.5'}" min="0.1" max="10" step="0.1" onchange="onCustomChange()">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="setting-group">
+      <div class="setting-title">🔄 重试设置</div>
+      <div class="setting-row">
+        <div class="setting-label">
+          <label>最大重试次数</label>
+          <span class="setting-desc">遇到网络波动或限流时，最多自动重试几次</span>
+        </div>
+        <input type="number" id="s_retryCount" value="${retryCount}" min="0" max="5">
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">
+          <label>百度限流冷却（秒）</label>
+          <span class="setting-desc">被百度限流后，等多少秒再重试</span>
+        </div>
+        <input type="number" id="s_baiduCooldown" value="${cooldown}" min="5" max="120">
+      </div>
+    </div>
+  `;
+}
+
+let _lastPreset = null;
+let _advancedOpen = false;
+
+function toggleAdvanced() {
+  _advancedOpen = !_advancedOpen;
+  const section = document.getElementById('advancedSection');
+  const toggle = document.getElementById('advancedToggle');
+  section.style.display = _advancedOpen ? 'block' : 'none';
+  toggle.textContent = _advancedOpen ? '收起 ▲' : '展开 ▼';
+}
+
+function selectSpeedPreset(key) {
+  _lastPreset = key;
+  document.querySelectorAll('.speed-card').forEach(c => c.classList.toggle('active', c.dataset.preset === key));
+  document.getElementById('s_speedPreset').value = key;
+  // 用预设值填充高级设置输入框
+  const preset = SPEED_PRESETS[key];
+  if (!preset) return;
+  const map = {
+    'check_baidu_threads': 's_baidu_threads',
+    'check_baidu_rate': 's_baidu_rate',
+    'check_quark_threads': 's_quark_threads',
+    'check_quark_rate': 's_quark_rate',
+    'check_uc_threads': 's_uc_threads',
+    'check_uc_rate': 's_uc_rate',
+  };
+  for (const [k, elId] of Object.entries(map)) {
+    const el = document.getElementById(elId);
+    if (el && preset[k] !== undefined) el.value = preset[k];
+  }
+}
+
+function onCustomChange() {
+  // 用户手动改高级设置 → 清除预设选择
+  document.getElementById('s_speedPreset').value = '';
+  document.querySelectorAll('.speed-card').forEach(c => c.classList.remove('active'));
+}
+
+async function saveCheckSettings() {
+  const payload = {};
+  const presetKey = document.getElementById('s_speedPreset').value;
+
+  // 如果有预设，先填充预设值（会被自定义输入覆盖）
+  if (presetKey && SPEED_PRESETS[presetKey]) {
+    const preset = SPEED_PRESETS[presetKey];
+    for (const [k, v] of Object.entries(preset)) {
+      if (k === 'label' || k === 'desc') continue;
+      payload[k] = String(v);
+    }
+  }
+
+  // 高级设置各平台输入（有值则覆盖预设）
+  const inputs = [
+    'check_baidu_threads', 'check_baidu_rate',
+    'check_quark_threads', 'check_quark_rate',
+    'check_uc_threads', 'check_uc_rate',
+    'check_retry_count', 'check_baidu_cooldown',
+  ];
+  for (const key of inputs) {
+    const el = document.getElementById(key.replace(/\./g, '_')); // keys use _ not .
+    // 直接尝试找 id=key
+    let id = key.replace(/check_/g, 's_');
+    // Actually the IDs are like s_baidu_threads, s_baidu_rate etc.
+    const idMap = {
+      'check_baidu_threads': 's_baidu_threads',
+      'check_baidu_rate': 's_baidu_rate',
+      'check_quark_threads': 's_quark_threads',
+      'check_quark_rate': 's_quark_rate',
+      'check_uc_threads': 's_uc_threads',
+      'check_uc_rate': 's_uc_rate',
+      'check_retry_count': 's_retryCount',
+      'check_baidu_cooldown': 's_baiduCooldown',
+    };
+    const el2 = document.getElementById(idMap[key]);
+    if (el2) payload[key] = el2.value;
+  }
+
+  try {
+    const r = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast('设置已保存，下次检测生效', 'success');
+      closeModal('checkSettingsModal');
+    } else {
+      showToast('保存失败', 'error');
+    }
+  } catch(e) {
+    showToast('保存失败: ' + e.message, 'error');
+  }
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+}
+
+// ── 设置弹窗 CSS（动态注入） ──
+(function injectSettingsStyles() {
+  const css = `
+    .modal-content .modal-body { padding: 16px 0; }
+    .setting-group { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+    .setting-group:last-child { border-bottom: none; margin-bottom: 0; }
+    .setting-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+    .setting-row { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; gap: 12px; }
+    .setting-row:last-child { margin-bottom: 0; }
+    .setting-label { flex: 1; min-width: 0; }
+    .setting-label label { font-size: 13px; font-weight: 500; color: var(--text); display: block; margin-bottom: 2px; }
+    .setting-desc { font-size: 11px; color: var(--gray-400); display: block; line-height: 1.4; }
+    .setting-row input[type="number"] { width: 70px; flex-shrink: 0; padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 13px; background: var(--bg-input); color: var(--text); text-align: center; margin-top: 6px; }
+    .setting-row input[type="number"]:focus { outline: none; border-color: var(--primary); }
+    .setting-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .speed-grid { display: flex; gap: 8px; }
+    .speed-card { flex: 1; padding: 12px; border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; text-align: center; transition: all .15s; background: var(--bg-card); }
+    .speed-card:hover { border-color: var(--primary); }
+    .speed-card.active { border-color: var(--primary); background: var(--primary-light); }
+    .speed-card-label { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .speed-card-desc { font-size: 11px; color: var(--gray-400); line-height: 1.3; }
+    [data-theme="dark"] .speed-card.active { background: #1a2a4a; }
+    .platform-adv { margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--gray-50); }
+    .platform-adv-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+    [data-theme="dark"] .platform-adv { background: #1a1f2e; }
+  `;
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
 init();
 </script>
+
+<!-- 检测设置弹窗 -->
+<div class="modal-overlay" id="checkSettingsModal" style="display:none;">
+  <div class="modal-content" style="width:480px;max-height:85vh;display:flex;flex-direction:column;padding:24px;">
+    <h3 style="margin-bottom:6px;">⚙️ 检测设置</h3>
+    <div style="font-size:12px;color:var(--gray-400);margin-bottom:10px;">修改后下次检测生效</div>
+    <div class="modal-body" style="flex:1;overflow-y:auto;min-height:0;"></div>
+    <div class="setting-actions">
+      <button class="btn" onclick="closeModal('checkSettingsModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveCheckSettings()">保存设置</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

@@ -23,12 +23,12 @@ from typing import Optional
 import requests
 
 from logger import setup_logger
+from rate_limiter import buckets, RetryCount, BaiduCooldown, get_platform_threads
 
 log = setup_logger('checker')
 
 # ── 请求配置 ──
 TIMEOUT = 15
-MAX_WORKERS = 5
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -46,6 +46,7 @@ class CheckResult:
     status_code: int = 0
     error: Optional[str] = None
     is_rate_limited: bool = False
+    retried: int = 0
 
 
 # ── 辅助函数 ──
@@ -102,47 +103,63 @@ def _quark_check(pwd_id: str, passcode: str):
         'Origin': 'https://pan.quark.cn',
         'Referer': 'https://pan.quark.cn/',
     }
-    # 第1步：获取 stoken
-    try:
-        resp = requests.post(
-            'https://drive-h.quark.cn/1/clouddrive/share/sharepage/token',
-            json={'pwd_id': pwd_id, 'passcode': passcode or '', 'support_visit_limit_private_share': True},
-            headers=headers, timeout=TIMEOUT,
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get('status') == 200 and data.get('code') == 0:
-                stoken = data.get('data', {}).get('stoken')
-    except Exception:
-        pass
+    # 第1步：获取 stoken（含网络异常重试）
+    retries = 0
+    while retries <= RetryCount:
+        try:
+            resp = requests.post(
+                'https://drive-h.quark.cn/1/clouddrive/share/sharepage/token',
+                json={'pwd_id': pwd_id, 'passcode': passcode or '', 'support_visit_limit_private_share': True},
+                headers=headers, timeout=TIMEOUT,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get('status') == 200 and data.get('code') == 0:
+                    stoken = data.get('data', {}).get('stoken')
+            break
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            retries += 1
+            if retries > RetryCount:
+                break
+            _time.sleep(2)
 
     if not stoken:
-        return CheckResult(False, failure_reason='分享链接失效或不存在')
+        return CheckResult(False, failure_reason='分享链接失效或不存在', retried=retries)
 
-    # 第2步：获取文件列表
-    try:
-        resp = requests.get(
-            'https://drive-pc.quark.cn/1/clouddrive/share/sharepage/detail',
-            params={'pwd_id': pwd_id, 'stoken': stoken, 'ver': '2', 'pr': 'ucpro'},
-            headers={**headers, 'Accept': 'application/json'},
-            timeout=TIMEOUT,
-        )
-        if resp.status_code != 200:
-            return CheckResult(False, failure_reason=f'HTTP错误: {resp.status_code}')
-        data = resp.json()
-        if data.get('status') != 200 or data.get('code') != 0:
-            return CheckResult(False, failure_reason='API返回错误')
-        if not data.get('data', {}).get('list'):
-            return CheckResult(False, failure_reason='分享文件列表为空')
-        return CheckResult(True)
-    except requests.exceptions.Timeout:
-        return CheckResult(True)  # 超时保守判定有效
-    except Exception as e:
-        return CheckResult(False, failure_reason=f'请求异常: {str(e)[:50]}')
+    # 第2步：获取文件列表（含网络异常重试）
+    retries = 0
+    while retries <= RetryCount:
+        try:
+            resp = requests.get(
+                'https://drive-pc.quark.cn/1/clouddrive/share/sharepage/detail',
+                params={'pwd_id': pwd_id, 'stoken': stoken, 'ver': '2', 'pr': 'ucpro'},
+                headers={**headers, 'Accept': 'application/json'},
+                timeout=TIMEOUT,
+            )
+            if resp.status_code != 200:
+                return CheckResult(False, failure_reason=f'HTTP错误: {resp.status_code}')
+            data = resp.json()
+            if data.get('status') != 200 or data.get('code') != 0:
+                return CheckResult(False, failure_reason='API返回错误')
+            if not data.get('data', {}).get('list'):
+                return CheckResult(False, failure_reason='分享文件列表为空')
+            return CheckResult(True)
+        except requests.exceptions.Timeout:
+            return CheckResult(True)  # 超时保守判定有效
+        except requests.exceptions.ConnectionError as e:
+            retries += 1
+            if retries > RetryCount:
+                return CheckResult(False, failure_reason=f'网络异常(已重试{RetryCount}次): {str(e)[:50]}',
+                                   retried=retries)
+            _time.sleep(2)
+        except Exception as e:
+            return CheckResult(False, failure_reason=f'请求异常: {str(e)[:50]}')
+    return CheckResult(False, failure_reason='获取文件列表失败', retried=retries)
 
 
 def check_quark(url: str, pwd: str = '') -> CheckResult:
     start = _time.time()
+    buckets['quark'].acquire()  # 限流：取令牌，不够则阻塞
     pwd_id, passcode = _quark_extract_params(url)
     if not pwd_id:
         return CheckResult(False, failure_reason='无法提取分享ID', duration_ms=_elapsed_ms(start))
@@ -185,6 +202,8 @@ def check_baidu(url: str, pwd: str = '') -> CheckResult:
     if not surl:
         return CheckResult(False, failure_reason='无法提取分享ID', duration_ms=_elapsed_ms(start))
 
+    buckets['baidu'].acquire()  # 限流：取令牌，不够则阻塞
+
     shorturl = surl[1:] if len(surl) > 1 else surl
     effective_pwd = pwd or url_pwd  # 优先使用传入的pwd，其次URL中提取的
 
@@ -192,47 +211,74 @@ def check_baidu(url: str, pwd: str = '') -> CheckResult:
     randsk = None
     if effective_pwd:
         from urllib.parse import quote as _quote
-        try:
-            resp = requests.post(
-                f'https://pan.baidu.com/share/verify?surl={_quote(shorturl)}&pwd={_quote(effective_pwd)}',
-                data={'pwd': effective_pwd, 'vcode': '', 'vcode_str': ''},
-                headers={
-                    'User-Agent': USER_AGENT,
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Referer': f'https://pan.baidu.com/s/{shorturl}',
-                },
-                timeout=TIMEOUT,
-            )
-            data = resp.json()
-            if data.get('errno') == 0:
-                randsk = data.get('randsk')
-        except Exception as e:
-            log.debug(f'百度 verify 失败: {e}')
+        retries = 0
+        while retries <= RetryCount:
+            try:
+                resp = requests.post(
+                    f'https://pan.baidu.com/share/verify?surl={_quote(shorturl)}&pwd={_quote(effective_pwd)}',
+                    data={'pwd': effective_pwd, 'vcode': '', 'vcode_str': ''},
+                    headers={
+                        'User-Agent': USER_AGENT,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Referer': f'https://pan.baidu.com/s/{shorturl}',
+                    },
+                    timeout=TIMEOUT,
+                )
+                data = resp.json()
+                if data.get('errno') == 0:
+                    randsk = data.get('randsk')
+                break
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                retries += 1
+                if retries > RetryCount:
+                    break
+                log.warning(f'百度 verify 网络异常 ({str(e)[:30]}), {retries}/{RetryCount} 次重试')
+                _time.sleep(2)
 
         if randsk is None:
             return CheckResult(False, failure_reason='验证提取码失败', duration_ms=_elapsed_ms(start))
 
-    # 第2步：获取分享列表
-    try:
-        from urllib.parse import quote as _quote
-        headers = {'User-Agent': USER_AGENT, 'Accept': 'application/json'}
-        if randsk:
-            headers['Cookie'] = f'BDCLND={randsk}'
-        resp = requests.get(
-            f'https://pan.baidu.com/share/list?web=5&app_id=250528&desc=1&showempty=0'
-            f'&page=1&num=20&order=time&shorturl={_quote(shorturl)}'
-            f'&root=1&view_mode=1&channel=chunlei&web=1&clienttype=0',
-            headers=headers, timeout=TIMEOUT,
-        )
-        data = resp.json()
-        errno = data.get('errno', -1)
-        elapsed = _elapsed_ms(start)
-        if errno == 0:
-            return CheckResult(True, duration_ms=elapsed)
-        reason = BAIDU_ERRNO_REASONS.get(errno, f'分享链接无效 (errno: {errno})')
-        return CheckResult(False, failure_reason=reason, duration_ms=elapsed, is_rate_limited=(errno == -62))
-    except Exception as e:
-        return CheckResult(False, failure_reason=f'请求失败: {str(e)[:80]}', duration_ms=_elapsed_ms(start))
+    # 第2步：获取分享列表（含限流自动降级 + 网络异常重试）
+    from urllib.parse import quote as _quote
+    retries = 0
+    while True:
+        try:
+            headers = {'User-Agent': USER_AGENT, 'Accept': 'application/json'}
+            if randsk:
+                headers['Cookie'] = f'BDCLND={randsk}'
+            resp = requests.get(
+                f'https://pan.baidu.com/share/list?web=5&app_id=250528&desc=1&showempty=0'
+                f'&page=1&num=20&order=time&shorturl={_quote(shorturl)}'
+                f'&root=1&view_mode=1&channel=chunlei&web=1&clienttype=0',
+                headers=headers, timeout=TIMEOUT,
+            )
+            data = resp.json()
+            errno = data.get('errno', -1)
+            elapsed = _elapsed_ms(start)
+
+            # 限流降级：errno=-62，自动冷却重试
+            if errno == -62 and retries < RetryCount:
+                retries += 1
+                log.warning(f'百度限流 (errno=-62), {retries}/{RetryCount} 次重试, 等待 {BaiduCooldown}s')
+                _time.sleep(BaiduCooldown)
+                buckets['baidu'].acquire()  # 冷却后重新取令牌
+                continue
+
+            if errno == 0:
+                return CheckResult(True, duration_ms=elapsed, retried=retries)
+            reason = BAIDU_ERRNO_REASONS.get(errno, f'分享链接无效 (errno: {errno})')
+            return CheckResult(False, failure_reason=reason, duration_ms=elapsed,
+                               is_rate_limited=(errno == -62), retried=retries)
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            retries += 1
+            if retries > RetryCount:
+                return CheckResult(False, failure_reason=f'网络异常(已重试{RetryCount}次): {str(e)[:50]}',
+                                   duration_ms=_elapsed_ms(start), retried=retries)
+            log.warning(f'百度网络异常 ({str(e)[:30]}), {retries}/{RetryCount} 次重试')
+            _time.sleep(2)
+        except Exception as e:
+            return CheckResult(False, failure_reason=f'请求失败: {str(e)[:80]}',
+                               duration_ms=_elapsed_ms(start), retried=retries)
 
 
 # ── UC 网盘检测 ──
@@ -243,6 +289,7 @@ UC_VALID_KW = ['文件', '分享']
 
 def check_uc(url: str) -> CheckResult:
     start = _time.time()
+    buckets['uc'].acquire()  # 限流：取令牌，不够则阻塞
     m = re.search(r'drive\.uc\.cn/s/([a-zA-Z0-9]+)', _extract_clean_url(url))
     if not m:
         return CheckResult(False, failure_reason='无法提取分享ID', duration_ms=_elapsed_ms(start))
@@ -255,27 +302,37 @@ def check_uc(url: str) -> CheckResult:
             'Chrome/87.0.4280.101 Mobile Safari/537.36'
         ),
     }
-    try:
-        resp = requests.get(f'https://drive.uc.cn/s/{share_id}', headers=headers, timeout=TIMEOUT)
-        elapsed = _elapsed_ms(start)
-        if resp.status_code != 200:
-            return CheckResult(False, failure_reason=f'HTTP状态码: {resp.status_code}',
-                              status_code=resp.status_code, duration_ms=elapsed)
+    retries = 0
+    while retries <= RetryCount:
+        try:
+            resp = requests.get(f'https://drive.uc.cn/s/{share_id}', headers=headers, timeout=TIMEOUT)
+            elapsed = _elapsed_ms(start)
+            if resp.status_code != 200:
+                return CheckResult(False, failure_reason=f'HTTP状态码: {resp.status_code}',
+                                  status_code=resp.status_code, duration_ms=elapsed, retried=retries)
 
-        text = resp.text
-        for kw in UC_FAILURE_KW:
-            if kw in text:
-                return CheckResult(False, failure_reason='链接已失效', status_code=200, duration_ms=elapsed)
-        for kw in UC_VALID_KW:
-            if kw in text:
-                return CheckResult(True, status_code=200, duration_ms=elapsed)
-        return CheckResult(False, failure_reason='无法判断链接有效性', status_code=200, duration_ms=elapsed)
-    except requests.exceptions.Timeout:
-        return CheckResult(True, duration_ms=_elapsed_ms(start))
-    except requests.exceptions.ConnectionError:
-        return CheckResult(True, duration_ms=_elapsed_ms(start))
-    except Exception as e:
-        return CheckResult(False, failure_reason=f'请求失败: {str(e)[:100]}', duration_ms=_elapsed_ms(start))
+            text = resp.text
+            for kw in UC_FAILURE_KW:
+                if kw in text:
+                    return CheckResult(False, failure_reason='链接已失效', status_code=200,
+                                       duration_ms=elapsed, retried=retries)
+            for kw in UC_VALID_KW:
+                if kw in text:
+                    return CheckResult(True, status_code=200, duration_ms=elapsed, retried=retries)
+            return CheckResult(False, failure_reason='无法判断链接有效性', status_code=200,
+                               duration_ms=elapsed, retried=retries)
+        except requests.exceptions.Timeout:
+            return CheckResult(True, duration_ms=_elapsed_ms(start))
+        except requests.exceptions.ConnectionError as e:
+            retries += 1
+            if retries > RetryCount:
+                return CheckResult(False, failure_reason=f'网络异常(已重试{RetryCount}次): {str(e)[:50]}',
+                                   duration_ms=_elapsed_ms(start), retried=retries)
+            _time.sleep(2)
+        except Exception as e:
+            return CheckResult(False, failure_reason=f'请求失败: {str(e)[:100]}',
+                               duration_ms=_elapsed_ms(start), retried=retries)
+    return CheckResult(False, failure_reason='请求失败', duration_ms=_elapsed_ms(start), retried=retries)
 
 
 # ── 统一入口 ──
@@ -303,18 +360,21 @@ def check_share_url(url: str, pwd: str = '') -> CheckResult:
     return CheckResult(False, failure_reason='该平台检测器未实现')
 
 
-def batch_check(shares: list) -> dict:
+def _process_platform(shares: list, workers: int):
     """
-    批量检测分享链接有效性（并发）
+    处理单个平台的所有记录（内部独立线程池 + 限流控制）
 
-    shares: list of dict，每个元素至少含 'id', 'url', 'name', 'source'
-    返回: { total, valid_count, invalid_count, results: [...] }
+    返回: (results, valid_count, rate_limited_count, retried_count)
     """
-    total = len(shares)
-    results = [None] * total
+    results = []
     valid_count = 0
+    rate_limited_count = 0
+    retried_count = 0
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+    if not shares:
+        return results, valid_count, rate_limited_count, retried_count
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         future_map = {}
         for idx, share in enumerate(shares):
             f = pool.submit(check_share_url, share.get('url', ''), share.get('pwd', ''))
@@ -338,16 +398,80 @@ def batch_check(shares: list) -> dict:
                 'duration_ms': r.duration_ms,
                 'status_code': r.status_code,
                 'is_rate_limited': r.is_rate_limited,
+                'retried': r.retried,
             }
-            results[idx] = item
+            results.append(item)
             if r.valid:
                 valid_count += 1
+            if r.is_rate_limited:
+                rate_limited_count += 1
+            if r.retried:
+                retried_count += r.retried
 
+    return results, valid_count, rate_limited_count, retried_count
+
+
+def batch_check(shares: list) -> dict:
+    """
+    批量检测分享链接有效性（各平台独立并发执行 + 限流控制）
+
+    shares: list of dict，每个元素至少含 'id', 'url', 'name', 'source', 'pwd'
+    返回: { total, valid_count, invalid_count, rate_limited_count, retried_count, results: [...] }
+    """
+    # 1. 按平台分组
+    groups = {'baidu': [], 'quark': [], 'uc': [], 'unknown': []}
+    for s in shares:
+        url = s.get('url', '')
+        platform = detect_platform(url) or 'unknown'
+        if platform in groups:
+            groups[platform].append(s)
+        else:
+            groups['unknown'].append(s)
+
+    # 2. 每组并发数（各平台独立线程数，来自 settings）
+    group_workers = {
+        'baidu': get_platform_threads('baidu'),
+        'quark': get_platform_threads('quark'),
+        'uc':    get_platform_threads('uc'),
+        'unknown': 1,
+    }
+
+    all_results = []
+    valid_count = 0
+    rate_limited_count = 0
+    retried_count = 0
+
+    # 3. 各平台独立并发执行（外层线程池跑平台任务）
+    platform_tasks = [(p, g) for p, g in groups.items() if g]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(platform_tasks)) as pool:
+        future_map = {}
+        for platform, group in platform_tasks:
+            w = group_workers[platform]
+            f = pool.submit(_process_platform, group, w)
+            future_map[f] = platform
+
+        for f in concurrent.futures.as_completed(future_map):
+            platform = future_map[f]
+            try:
+                results, v, rl, rt = f.result()
+                all_results.extend(results)
+                valid_count += v
+                rate_limited_count += rl
+                retried_count += rt
+                log.info(f'{platform} 平台检测完成: 共 {len(results)} 条, '
+                         f'有效 {v}, 限流 {rl}, 重试 {rt} 次')
+            except Exception as e:
+                log.error(f'{platform} 平台检测异常: {e}')
+
+    total = len(shares)
     invalid_count = total - valid_count
-    log.info(f'有效性检测完成: 总计 {total}, 有效 {valid_count}, 失效 {invalid_count}')
+    log.info(f'有效性检测完成: 总计 {total}, 有效 {valid_count}, 失效 {invalid_count}, '
+             f'限流 {rate_limited_count}, 重试 {retried_count} 次')
     return {
         'total': total,
         'valid_count': valid_count,
         'invalid_count': invalid_count,
-        'results': results,
+        'rate_limited_count': rate_limited_count,
+        'retried_count': retried_count,
+        'results': all_results,
     }
