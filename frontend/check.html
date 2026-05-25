@@ -134,7 +134,15 @@
   .back-circle:hover { background: #3B56D9; box-shadow: 0 3px 10px rgba(79,110,247,.45); transform: scale(1.05); }
   .topbar-right { display: flex; align-items: center; gap: 8px; }
 
-  .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-shrink: 0; flex-wrap: wrap; width: 100%; }
+  .toolbar { display: flex; align-items: stretch; gap: 12px; margin-bottom: 14px; flex-shrink: 0; flex-wrap: wrap; width: 100%; }
+  .toolbar-zone { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-radius: 10px; flex: 0 0 auto; }
+  .zone-batch { background: rgba(239,68,68,.04); border: 1px solid rgba(239,68,68,.08); }
+  .zone-check { background: rgba(79,110,247,.04); border: 1px solid rgba(79,110,247,.08); margin-left: auto; }
+  .zone-header { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+                 padding: 2px 8px; border-radius: 5px; white-space: nowrap; line-height: 1; align-self: flex-start; }
+  .zone-batch .zone-header { color: var(--danger); background: rgba(239,68,68,.1); }
+  .zone-check .zone-header { color: var(--primary); background: rgba(79,110,247,.1); }
+  .zone-body { display: flex; align-items: center; gap: 10px; }
 
   .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer;
          font-size: 13px; font-weight: 500; transition: all .15s; display: inline-flex;
@@ -146,6 +154,7 @@
   .btn-ghost:hover { background: var(--gray-100); }
   .btn-danger { background: rgba(239,68,68,.12); color: var(--danger); }
   .btn-danger:hover { background: rgba(239,68,68,.22); }
+  .btn-danger:disabled { opacity: .5; cursor: not-allowed; background: rgba(239,68,68,.08); }
 
   .result-info { color: var(--gray-400); font-size: 13px; white-space: nowrap; }
   .select-all-check { width: 16px; height: 16px; cursor: pointer; accent-color: var(--primary); }
@@ -307,6 +316,7 @@
                 background: var(--bg-input); color: var(--text); font-size: 13px; outline: none;
                 transition: border-color .15s; }
   .form-input:focus { border-color: var(--primary); }
+  .scope-option:hover { border-color: var(--primary); background: var(--primary-light); }
   [data-theme="dark"] .modal-overlay { background: rgba(0,0,0,.55); }
 </style>
 </head>
@@ -406,13 +416,28 @@
 
     <div class="content">
       <div class="toolbar">
-        <input type="checkbox" class="select-all-check" id="selectAllCheck" onchange="toggleSelectAll()" title="全选/取消">
-        <span class="result-info" id="resultInfo">共 0 条</span>
-        <span class="result-info" style="margin-left:4px;"><span id="selectedCount">0</span> 条选中</span>
-        <button class="btn btn-danger" id="deleteSelectedBtn" onclick="deleteSelected()" style="display:none">🗑️ 删除</button>
-        <span style="flex:1"></span>
-        <button class="btn btn-primary" id="startCheckBtn" onclick="startCheck()">▶ 开始检测</button>
-        <button class="btn btn-ghost" onclick="showCheckSettings()" title="检测设置" style="margin-left:6px;padding:6px 10px;font-size:16px;">⚙️</button>
+        <div class="toolbar-zone zone-batch">
+          <span class="zone-header">批量操作</span>
+          <div class="zone-body" style="flex-direction:column;align-items:stretch;gap:6px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" class="select-all-check" id="selectAllCheck" onchange="toggleSelectAll()" title="全选/取消">
+              <span class="result-info" id="resultInfo">共 0 条</span>
+              <span class="result-info"><span id="selectedCount">0</span> 条选中</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button class="btn btn-danger" id="deleteSelectedBtn" onclick="deleteSelected()" style="padding:5px 12px;font-size:12px;">🗑️ 删除</button>
+            </div>
+          </div>
+        </div>
+        <div class="toolbar-zone zone-check">
+          <span class="zone-header">链接检测</span>
+          <div class="zone-body" style="flex-direction:column;align-items:center;gap:8px;flex:1;justify-content:center;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button class="btn btn-primary" id="startCheckBtn" onclick="startCheck()" style="padding:6px 18px;">▶ 开始检测</button>
+              <button class="btn btn-ghost" onclick="showCheckSettings()" title="检测设置" style="padding:6px 10px;font-size:15px;">⚙️</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-bar-bg">
@@ -478,6 +503,33 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeDeleteConfirm()">取消</button>
       <button class="btn btn-danger" onclick="submitDelete()" style="background:var(--danger);color:#fff;">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- 检测范围选择对话框 -->
+<div class="modal-overlay" id="checkScopeModal" style="display:none;" onclick="closeCheckScope(event)">
+  <div class="modal-content" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span>🔍 选择检测范围</span>
+      <span class="modal-close" onclick="closeCheckScope()">✕</span>
+    </div>
+    <div class="modal-body" style="font-size:14px;line-height:1.6;">
+      <p id="checkScopeText"></p>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+        <label class="scope-option" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;">
+          <input type="radio" name="checkScope" value="all" checked style="accent-color:var(--primary);">
+          <span id="checkScopeLabelAll"></span>
+        </label>
+        <label class="scope-option" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;">
+          <input type="radio" name="checkScope" value="pending">
+          <span id="checkScopeLabelPending"></span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeCheckScope()">取消</button>
+      <button class="btn btn-primary" onclick="submitCheckScope()">开始检测</button>
     </div>
   </div>
 </div>
@@ -677,7 +729,9 @@ function toggleRow(id) {
   updateDeleteBtn();
 }
 function updateSelectedInfo() { document.getElementById('selectedCount').textContent = state.selected.size; }
-function updateDeleteBtn() { document.getElementById('deleteSelectedBtn').style.display = state.selected.size > 0 ? '' : 'none'; }
+function updateDeleteBtn() {
+  document.getElementById('deleteSelectedBtn').disabled = state.selected.size === 0;
+}
 
 function setSourceFilter(source, el) {
   state.sourceFilter = source;
@@ -896,7 +950,7 @@ let _deleteIds = [];
 
 function deleteSelected() {
   _deleteIds = Array.from(state.selected);
-  if(_deleteIds.length===0) return;
+  if(_deleteIds.length===0) { showToast('请先勾选要删除的记录', 'info'); return; }
   document.getElementById('deleteConfirmText').textContent = `确定删除选中的 ${_deleteIds.length} 条检测记录？此操作不可恢复。`;
   document.getElementById('deleteConfirmModal').style.display = 'flex';
 }
@@ -920,52 +974,102 @@ async function submitDelete() {
   } catch(e) { showToast('删除失败: '+e.message, 'error'); }
 }
 
-// Batch Check (并发逐条检测，实时进度)
+// Batch Check (并发逐条检测，实时进度) — 智能判断检测范围
+let _checkScopeRecords = [];
+
 async function startCheck() {
   const records = getVisibleRecords();
   if(records.length===0) { showToast('没有可检测的记录', 'info'); return; }
+
+  // 统计已检测和待检测数量
+  const pendingCount = records.filter(r => r.check_valid === null || r.check_valid === undefined).length;
+  const checkedCount = records.length - pendingCount;
+
+  // 如果有已检测过的记录，弹出选择对话框
+  if (checkedCount > 0) {
+    document.getElementById('checkScopeText').textContent =
+      `当前视图共 ${records.length} 条记录，其中 ${checkedCount} 条已检测过，${pendingCount} 条待检测。请选择检测范围：`;
+    document.getElementById('checkScopeLabelAll').textContent = `全部重新检测（${records.length} 条）`;
+    document.getElementById('checkScopeLabelPending').textContent = `仅检测待检测（${pendingCount} 条）`;
+    document.getElementById('checkScopeModal').style.display = 'flex';
+    _checkScopeRecords = records;
+    // 默认选中对应选项
+    const radio = document.querySelector('input[name="checkScope"][value="pending"]');
+    if (radio) radio.checked = true;
+    return;
+  }
+
+  // 全部待检测，直接开始
+  _checkScopeRecords = records;
+  doStartCheck(records);
+}
+
+async function submitCheckScope() {
+  const selected = document.querySelector('input[name="checkScope"]:checked');
+  const scope = selected ? selected.value : 'pending';
+  document.getElementById('checkScopeModal').style.display = 'none';
+
+  if (scope === 'pending') {
+    // 仅检测待检测
+    const pending = _checkScopeRecords.filter(r => r.check_valid === null || r.check_valid === undefined);
+    doStartCheck(pending);
+  } else {
+    doStartCheck(_checkScopeRecords);
+  }
+}
+
+function closeCheckScope(e) {
+  if(e && e.target !== e.currentTarget) return;
+  document.getElementById('checkScopeModal').style.display = 'none';
+  _checkScopeRecords = [];
+}
+
+function doStartCheck(records) {
+  _checkScopeRecords = [];
+  if(records.length===0) { showToast('没有待检测的记录', 'info'); return; }
   state.checking = true;
   document.getElementById('startCheckBtn').disabled = true;
   document.getElementById('progressWrap').classList.add('active');
 
-  const CONCURRENCY = 5; // 同时跑几条
+  const CONCURRENCY = 5;
   let done = 0, valid = 0, invalid = 0, rateLimited = 0;
 
   updateProgress(0, records.length, '正在准备检测…');
   renderTable();
 
-  // 按 CONCURRENCY 条一组依次走
-  for (let i = 0; i < records.length; i += CONCURRENCY) {
-    const batch = records.slice(i, i + CONCURRENCY);
-    const promises = batch.map(r =>
-      fetch('/api/check-records/check-validity-one', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({record_id: r.id})
-      }).then(res => res.json())
-       .then(d => {
-         done++;
-         if (d.valid) valid++;
-         else invalid++;
-         if (d.is_rate_limited) rateLimited++;
-         updateProgress(done, records.length, `已检测 ${done}/${records.length} 条`);
-         return d;
-       })
-    );
+  // 异步执行检测
+  (async () => {
+    for (let i = 0; i < records.length; i += CONCURRENCY) {
+      const batch = records.slice(i, i + CONCURRENCY);
+      const promises = batch.map(r =>
+        fetch('/api/check-records/check-validity-one', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({record_id: r.id})
+        }).then(res => res.json())
+         .then(d => {
+           done++;
+           if (d.valid) valid++;
+           else invalid++;
+           if (d.is_rate_limited) rateLimited++;
+           updateProgress(done, records.length, `已检测 ${done}/${records.length} 条`);
+           return d;
+         })
+      );
+      await Promise.all(promises);
+    }
 
-    await Promise.all(promises);
-  }
+    await loadRecords();
+    updateProgress(records.length, records.length, '检测完成');
+    let toastMsg = `检测完成: ${valid} 有效, ${invalid} 失效`;
+    if (rateLimited > 0) toastMsg += `, ${rateLimited} 条被限流`;
+    showToast(toastMsg, invalid > 0 ? 'warning' : 'success');
 
-  await loadRecords();
-  updateProgress(records.length, records.length, '检测完成');
-  let toastMsg = `检测完成: ${valid} 有效, ${invalid} 失效`;
-  if (rateLimited > 0) toastMsg += `, ${rateLimited} 条被限流`;
-  showToast(toastMsg, invalid > 0 ? 'warning' : 'success');
-
-  state.checking = false;
-  document.getElementById('startCheckBtn').disabled = false;
-  document.getElementById('progressWrap').classList.remove('active');
-  updateStats(); renderTable();
+    state.checking = false;
+    document.getElementById('startCheckBtn').disabled = false;
+    document.getElementById('progressWrap').classList.remove('active');
+    updateStats(); renderTable();
+  })();
 }
 
 // Single Check
