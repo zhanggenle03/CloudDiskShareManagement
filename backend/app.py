@@ -39,7 +39,6 @@ from parser import auto_detect_and_parse
 from sync_manager import get_sync_manager
 from process_manager import on_startup, on_shutdown, graceful_shutdown, restart_service, remove_pid, terminate_process, shutdown_service
 from checker import batch_check, check_share_url, detect_platform
-from tray_icon import start_tray as start_tray_thread
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='/static')
 CORS(app)
@@ -1423,6 +1422,7 @@ if __name__ == '__main__':
     # ── 启动系统托盘（子线程） ──
     _tray_thread = None
     try:
+        from tray_icon import start_tray as start_tray_thread
         _tray_thread = threading.Thread(target=start_tray_thread, daemon=True, name="TrayIcon")
         _tray_thread.start()
         log.info("系统托盘已启动")

@@ -31,23 +31,26 @@ from app import app, on_startup, init_db, log
 if __name__ == '__main__':
     # 单实例保护 + PID 文件写入
     on_startup()
-    
+    print("[启动] PID 就绪", flush=True)
+
     # 初始化数据库
     init_db()
-    
-    log.info("=" * 50)
-    log.info("  云盘分享管理工具 已启动")
-    log.info("  托盘图标已驻留系统栏，右键可打开浏览器或退出")
-    log.info("=" * 50)
-    
+    print("[启动] 数据库已初始化", flush=True)
+
+    print("[启动] 云盘分享管理工具正在启动...", flush=True)
+
     # ── 启动系统托盘（子线程） ──
     try:
         from tray_icon import start_tray as start_tray_thread
         _tray_thread = threading.Thread(target=start_tray_thread, daemon=True, name="TrayIcon")
         _tray_thread.start()
+        print("[启动] 系统托盘已启动", flush=True)
         log.info("系统托盘已启动")
     except Exception as e:
+        print(f"[启动] 系统托盘启动失败: {e}", flush=True)
         log.warning(f"系统托盘启动失败（可忽略，不影响核心功能）: {e}")
-    
+
+    print("[启动] 服务已就绪，托盘图标已驻留系统栏，右键可打开浏览器或退出", flush=True)
+
     # 启动应用
     app.run(host='127.0.0.1', port=5000, debug=False)
