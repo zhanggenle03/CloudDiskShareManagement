@@ -39,6 +39,7 @@ from parser import auto_detect_and_parse
 from sync_manager import get_sync_manager
 from process_manager import on_startup, on_shutdown, graceful_shutdown, restart_service, remove_pid, terminate_process, shutdown_service
 from checker import batch_check, check_share_url, detect_platform
+from tray_icon import start_tray as start_tray_thread
 
 app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='/static')
 CORS(app)
@@ -1412,13 +1413,25 @@ def mark_invalid_shares():
 
 # ── 启动入口 ─────────────────────────────────────────────
 if __name__ == '__main__':
+    import threading
+
     # 单实例保护 + PID 文件写入
     on_startup()
 
     init_db()
+
+    # ── 启动系统托盘（子线程） ──
+    _tray_thread = None
+    try:
+        _tray_thread = threading.Thread(target=start_tray_thread, daemon=True, name="TrayIcon")
+        _tray_thread.start()
+        log.info("系统托盘已启动")
+    except Exception as e:
+        log.warning(f"系统托盘启动失败（可忽略，不影响核心功能）: {e}")
+
     log.info("=" * 50)
     log.info("  云盘分享管理工具 已启动")
-    log.info("  访问地址: http://127.0.0.1:5000")
+    log.info("  托盘图标已驻留系统栏，右键可打开浏览器或退出")
     log.info("=" * 50)
 
     try:

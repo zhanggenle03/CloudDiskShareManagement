@@ -8,8 +8,8 @@ python --version >nul 2>&1 || python3 --version >nul 2>&1 || (
     exit
 )
 
-:: Install dependencies
-pip install flask flask-cors -q
+:: Install dependencies (含 pystray 和 Pillow 支持系统托盘)
+pip install flask flask-cors pystray Pillow -q
 
 :: Stop old service
 if exist "app.pid" (
@@ -17,16 +17,11 @@ if exist "app.pid" (
     del /f "app.pid"
 )
 
-:: Start service
-echo Starting backend service...
+:: Start service（托盘图标由 app.py 自动启动）
+echo Starting backend service (tray icon will appear in system tray)...
 start /b pythonw backend\app.py
 
-:: Open launch page
-echo Opening launch page...
-cd frontend
-start launch.html
-cd ..
-
-echo Done!
+echo Done! The app icon is in your system tray.
+echo Right-click the tray icon to open browser or exit.
 timeout /t 2 >nul
 exit /b 0

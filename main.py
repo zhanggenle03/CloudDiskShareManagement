@@ -4,7 +4,6 @@ CloudDiskShareManagement - 打包入口文件
 """
 import os
 import sys
-import webbrowser
 import threading
 
 # ── 设置路径（支持 PyInstaller 打包）─────────────────────
@@ -29,12 +28,6 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # ── 导入并启动 Flask ──
 from app import app, on_startup, init_db, log
 
-def open_browser():
-    """延迟打开浏览器"""
-    import time
-    time.sleep(2)
-    webbrowser.open('http://127.0.0.1:5000')
-
 if __name__ == '__main__':
     # 单实例保护 + PID 文件写入
     on_startup()
@@ -44,11 +37,17 @@ if __name__ == '__main__':
     
     log.info("=" * 50)
     log.info("  云盘分享管理工具 已启动")
-    log.info("  访问地址: http://127.0.0.1:5000")
+    log.info("  托盘图标已驻留系统栏，右键可打开浏览器或退出")
     log.info("=" * 50)
     
-    # 启动后自动打开浏览器
-    threading.Thread(target=open_browser, daemon=True).start()
+    # ── 启动系统托盘（子线程） ──
+    try:
+        from tray_icon import start_tray as start_tray_thread
+        _tray_thread = threading.Thread(target=start_tray_thread, daemon=True, name="TrayIcon")
+        _tray_thread.start()
+        log.info("系统托盘已启动")
+    except Exception as e:
+        log.warning(f"系统托盘启动失败（可忽略，不影响核心功能）: {e}")
     
     # 启动应用
     app.run(host='127.0.0.1', port=5000, debug=False)

@@ -18,6 +18,8 @@ chardet_datas, chardet_binaries, chardet_hiddenimports = collect_all('chardet')
 charset_normalizer_datas, charset_normalizer_binaries, charset_normalizer_hiddenimports = collect_all('charset_normalizer')
 idna_datas, idna_binaries, idna_hiddenimports = collect_all('idna')
 urllib3_datas, urllib3_binaries, urllib3_hiddenimports = collect_all('urllib3')
+pillow_datas, pillow_binaries, pillow_hiddenimports = collect_all('PIL')
+pystray_datas, pystray_binaries, pystray_hiddenimports = collect_all('pystray')
 
 a = Analysis(
     ['main.py'],
@@ -26,7 +28,7 @@ a = Analysis(
     datas=[
         ('frontend', 'frontend'),
         ('backend', 'backend'),
-    ] + requests_datas + flask_datas + werkzeug_datas + jinja2_datas + certifi_datas + chardet_datas + charset_normalizer_datas + idna_datas + urllib3_datas,
+    ] + requests_datas + flask_datas + werkzeug_datas + jinja2_datas + certifi_datas + chardet_datas + charset_normalizer_datas + idna_datas + urllib3_datas + pillow_datas + pystray_datas,
     hiddenimports=[
         'flask',
         'flask_cors',
@@ -95,7 +97,7 @@ a = Analysis(
         're',
         'io',
         'webbrowser',
-    ] + requests_hiddenimports + flask_hiddenimports + werkzeug_hiddenimports + jinja2_hiddenimports + certifi_hiddenimports + chardet_hiddenimports + charset_normalizer_hiddenimports + idna_hiddenimports + urllib3_hiddenimports,
+    ] + requests_hiddenimports + flask_hiddenimports + werkzeug_hiddenimports + jinja2_hiddenimports + certifi_hiddenimports + chardet_hiddenimports + charset_normalizer_hiddenimports + idna_hiddenimports + urllib3_hiddenimports + pillow_hiddenimports + pystray_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
