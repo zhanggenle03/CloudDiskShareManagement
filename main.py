@@ -52,11 +52,9 @@ if __name__ == '__main__':
 
     print("[启动] 服务已就绪，托盘图标已驻留系统栏，右键可打开浏览器或退出", flush=True)
 
-    # ── 隐藏控制台窗口（启动信息已展示完毕） ──
+    # ── 释放控制台窗口（CMD 完全消失） ──
     import ctypes
-    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-    if hwnd:
-        ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+    ctypes.windll.kernel32.FreeConsole()
 
     # 启动应用
     app.run(host='127.0.0.1', port=5000, debug=False)
