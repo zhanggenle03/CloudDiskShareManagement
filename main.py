@@ -52,11 +52,18 @@ if __name__ == '__main__':
 
     print("[启动] 服务已就绪，托盘图标已驻留系统栏，右键可打开浏览器或退出", flush=True)
 
-    # ── 隐藏 CMD 窗口（启动信息已展示完毕） ──
+    # ── 隐藏 CMD 窗口：先重定向 stdout/stderr 到文件，再 FreeConsole ──
     import ctypes
-    hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-    if hwnd:
-        ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+    try:
+        # 重定向标准输出到日志文件（FreeConsole 后 Flask 仍能正常输出）
+        log_path = os.path.join(LOG_DIR, "console.log")
+        fh = open(log_path, "w", encoding="utf-8", buffering=1)
+        sys.stdout = fh
+        sys.stderr = fh
+        # 彻底断开控制台（CMD 窗口完全消失，不留在任务栏）
+        ctypes.windll.kernel32.FreeConsole()
+    except Exception:
+        pass
 
     # 启动应用
     app.run(host='127.0.0.1', port=5000, debug=False)
